@@ -1,0 +1,11 @@
+{
+    "name": "scrambler",
+    "dependencies": [
+        "gtest",
+        {
+            "name": "qtbase",
+            "default-features": false,
+            "features": ["widgets"]
+        }
+    ]
+}

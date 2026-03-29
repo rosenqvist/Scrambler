@@ -1,0 +1,103 @@
+BasedOnStyle: Google
+Language: Cpp
+Standard: Latest
+
+ColumnLimit: 120
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+AccessModifierOffset: -4
+IndentCaseLabels: true
+IndentCaseBlocks: false
+IndentExternBlock: Indent
+IndentPPDirectives: BeforeHash
+NamespaceIndentation: None
+LambdaBodyIndentation: OuterScope
+IndentRequiresClause: true
+RequiresClausePosition: OwnLine
+
+BreakBeforeBraces: Allman
+
+AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowShortLambdasOnASingleLine: None
+InsertBraces: true
+
+PointerAlignment: Left
+ReferenceAlignment: Left
+DerivePointerAlignment: false
+
+SpaceBeforeParens: ControlStatements
+SpacesInParensOptions:
+  InConditionalStatements: false
+  InCStyleCasts: false
+  InEmptyParentheses: false
+  Other: false
+SpacesInSquareBrackets: false
+SpacesInAngles: Never
+SpaceBeforeAssignmentOperators: true
+SpaceAfterCStyleCast: true
+SpaceAfterLogicalNot: false
+SpaceBeforeCpp11BracedList: false
+SpaceInEmptyBlock: false
+SpaceBeforeInheritanceColon: true
+SpaceBeforeRangeBasedForLoopColon: true
+
+BreakBeforeTernaryOperators: true
+BreakBeforeBinaryOperators: NonAssignment
+BreakConstructorInitializers: BeforeColon
+PackConstructorInitializers: NextLine
+BreakInheritanceList: BeforeColon
+AlwaysBreakTemplateDeclarations: Yes
+AllowAllParametersOfDeclarationOnNextLine: false
+BinPackParameters: false
+BinPackArguments: false
+AlignAfterOpenBracket: Align
+BreakBeforeConceptDeclarations: Always
+BreakAdjacentStringLiterals: true
+AlwaysBreakAfterReturnType: None
+
+AlignConsecutiveAssignments: None
+AlignConsecutiveDeclarations: None
+AlignConsecutiveBitFields: None
+AlignConsecutiveMacros: None
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 1
+AlignOperands: Align
+AlignEscapedNewlines: Left
+
+SortIncludes: CaseInsensitive
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^".*"'
+    Priority: 1
+  - Regex: '^<(windivert|WinDivert)'
+    Priority: 2
+  - Regex: '^<Q[A-Z]'
+    Priority: 3
+  - Regex: '^<(windows|Windows|winnt|windef)'
+    Priority: 4
+  - Regex: '^<'
+    Priority: 5
+
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+SeparateDefinitionBlocks: Always
+EmptyLineBeforeAccessModifier: Always
+EmptyLineAfterAccessModifier: Never
+FixNamespaceComments: true
+ReflowComments: true
+RemoveSemicolon: true
+SortUsingDeclarations: Never
+Cpp11BracedListStyle: true
+InsertTrailingCommas: Wrapped
+
+PenaltyReturnTypeOnItsOwnLine: 200
+PenaltyExcessCharacter: 1000000
+PenaltyBreakBeforeFirstCallParameter: 100

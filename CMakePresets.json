@@ -1,0 +1,59 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "installDir": "${sourceDir}/install/${presetName}",
+            "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+            "cacheVariables": {
+                "CMAKE_CXX_COMPILER": "clang-cl",
+                "CMAKE_C_COMPILER": "clang-cl",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            }
+        },
+        {
+            "name": "debug",
+            "displayName": "Debug",
+            "inherits": "base",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+        },
+        {
+            "name": "release",
+            "displayName": "Release",
+            "inherits": "base",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+        },
+        {
+            "name": "debug-asan",
+            "displayName": "Debug + ASan/UBSan",
+            "inherits": "debug",
+            "cacheVariables": {
+                "SCRAMBLER_ENABLE_ASAN": "ON",
+                "SCRAMBLER_ENABLE_UBSAN": "ON"
+            }
+        },
+        {
+            "name": "debug-tsan",
+            "displayName": "Debug + TSan",
+            "inherits": "debug",
+            "cacheVariables": { "SCRAMBLER_ENABLE_TSAN": "ON" }
+        }
+    ],
+    "buildPresets": [
+        { "name": "debug", "configurePreset": "debug" },
+        { "name": "release", "configurePreset": "release" },
+        { "name": "debug-asan", "configurePreset": "debug-asan" },
+        { "name": "debug-tsan", "configurePreset": "debug-tsan" }
+    ],
+    "testPresets": [
+        {
+            "name": "debug",
+            "configurePreset": "debug",
+            "output": { "outputOnFailure": true }
+        }
+    ]
+}
