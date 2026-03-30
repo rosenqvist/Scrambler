@@ -17,11 +17,6 @@ namespace scrambler::ui
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), refresh_timer_(new QTimer(this))
 {
-    // Work around a Qt 6 bug on Windows where loading the default
-    // window icon from the executable crashes with a QImage format
-    // assertion. Setting an empty icon avoids this issue.
-    setWindowIcon(QIcon());
-
     SetupUi();
 
     // Refresh process list every 3 seconds

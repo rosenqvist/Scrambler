@@ -9,6 +9,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 qt_standard_project_setup()
+set(app_icon_resource_windows "${CMAKE_CURRENT_SOURCE_DIR}/resources/placeholder.ico")
 
 option(SCRAMBLER_ENABLE_TESTS "Build unit tests" ON)
 option(SCRAMBLER_ENABLE_ASAN "Enable AddressSanitizer" OFF)
