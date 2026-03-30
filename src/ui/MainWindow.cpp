@@ -101,6 +101,17 @@ void MainWindow::SetupUi()
     drop_layout->addWidget(drop_label_);
     effects_layout->addLayout(drop_layout);
 
+    // Direction control
+    auto* direction_layout = new QHBoxLayout();
+    direction_layout->addWidget(new QLabel("Direction:"));
+    direction_combo_ = new QComboBox();
+    direction_combo_->addItem("Outbound", static_cast<int>(core::Direction::kOutbound));
+    direction_combo_->addItem("Inbound", static_cast<int>(core::Direction::kInbound));
+    direction_combo_->addItem("Both", static_cast<int>(core::Direction::kBoth));
+    direction_combo_->setCurrentIndex(2);  // Default to Both
+    direction_layout->addWidget(direction_combo_);
+    effects_layout->addLayout(direction_layout);
+
     main_layout->addWidget(effects_group);
 
     // Delay: keep slider and spinbox in sync
@@ -122,6 +133,15 @@ void MainWindow::SetupUi()
     {
         effects_.drop_rate.store(static_cast<float>(value) / 100.0F);
         drop_label_->setText(QString::number(value) + "%");
+    });
+
+    connect(direction_combo_,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            this,
+            [this](int index)
+    {
+        auto dir = static_cast<core::Direction>(direction_combo_->itemData(index).toInt());
+        effects_.direction.store(dir);
     });
 
     // the status bar:

@@ -104,6 +104,12 @@ void PacketInterceptor::CaptureLoop()
             continue;
         }
 
+        if (!effects_.MatchesDirection(addr.Outbound != 0))
+        {
+            Reinject(packet.data(), len, addr);
+            continue;
+        }
+
         if (effects_.ShouldDrop())
         {
             auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);

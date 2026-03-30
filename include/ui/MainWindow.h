@@ -4,6 +4,7 @@
 #include "core/FlowTracker.h"
 #include "core/PacketInterceptor.h"
 
+#include <QComboBox>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMainWindow>
@@ -14,7 +15,6 @@
 #include <QTreeWidget>
 
 #include <memory>
-
 
 namespace scrambler::ui
 {
@@ -56,6 +56,7 @@ private:  // NOLINT(readability-redundant-access-specifiers)
     QSpinBox* delay_spinbox_ = nullptr;
     QSlider* drop_slider_ = nullptr;
     QLabel* drop_label_ = nullptr;
+    QComboBox* direction_combo_ = nullptr;
 
     // Core pipeline
     core::TargetSet targets_;

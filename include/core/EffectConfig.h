@@ -6,14 +6,33 @@
 #include <mutex>
 #include <random>
 #include <unordered_set>
+#include <winsock.h>
 
 namespace scrambler::core
 {
+
+enum class Direction : std::uint8_t
+{
+    kOutbound = 0,
+    kInbound = 1,
+    kBoth = 2,
+};
 
 struct EffectConfig
 {
     std::atomic<int> delay_ms{0};
     std::atomic<float> drop_rate{0.0F};
+    std::atomic<Direction> direction{Direction::kBoth};
+
+    bool MatchesDirection(bool is_outbound) const
+    {
+        auto dir = direction.load();
+        if (dir == Direction::kBoth)
+        {
+            return true;
+        }
+        return (dir == Direction::kOutbound) == is_outbound;
+    }
 
     std::chrono::milliseconds Delay() const
     {
