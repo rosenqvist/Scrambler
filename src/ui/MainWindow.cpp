@@ -7,6 +7,8 @@
 #include <QHeaderView>
 #include <QIcon>
 #include <QMessageBox>
+#include <QSlider>
+#include <QSpinBox>
 #include <QStatusBar>
 #include <QVBoxLayout>
 
@@ -69,6 +71,58 @@ void MainWindow::SetupUi()
     process_layout->addWidget(process_tree_);
 
     main_layout->addWidget(process_group);
+
+    // Effects group
+    auto* effects_group = new QGroupBox("Effects");
+    auto* effects_layout = new QVBoxLayout(effects_group);
+
+    // Delay control
+    auto* delay_layout = new QHBoxLayout();
+    delay_layout->addWidget(new QLabel("Delay (ms):"));
+    delay_slider_ = new QSlider(Qt::Horizontal);
+    delay_slider_->setRange(0, 1000);
+    delay_slider_->setValue(0);
+    delay_spinbox_ = new QSpinBox();
+    delay_spinbox_->setRange(0, 1000);
+    delay_spinbox_->setSuffix(" ms");
+    delay_layout->addWidget(delay_slider_);
+    delay_layout->addWidget(delay_spinbox_);
+    effects_layout->addLayout(delay_layout);
+
+    // Drop rate control
+    auto* drop_layout = new QHBoxLayout();
+    drop_layout->addWidget(new QLabel("Drop rate:"));
+    drop_slider_ = new QSlider(Qt::Horizontal);
+    drop_slider_->setRange(0, 100);
+    drop_slider_->setValue(0);
+    drop_label_ = new QLabel("0%");
+    drop_label_->setFixedWidth(40);
+    drop_layout->addWidget(drop_slider_);
+    drop_layout->addWidget(drop_label_);
+    effects_layout->addLayout(drop_layout);
+
+    main_layout->addWidget(effects_group);
+
+    // Delay: keep slider and spinbox in sync
+    connect(delay_slider_, &QSlider::valueChanged, delay_spinbox_, &QSpinBox::setValue);
+    connect(delay_spinbox_, qOverload<int>(&QSpinBox::valueChanged), delay_slider_, &QSlider::setValue);
+    connect(delay_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this](int value)
+    {
+        effects_.delay_ms.store(value);
+    });
+
+    // Drop rate: slider drives the atomic and the label
+    connect(drop_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this](int value)
+    {
+        effects_.drop_rate.store(static_cast<float>(value) / 100.0F);
+        drop_label_->setText(QString::number(value) + "%");
+    });
 
     // the status bar:
     status_label_ = new QLabel();

@@ -91,8 +91,8 @@ add_custom_command(TARGET scrambler POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:scrambler>/platforms"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/debug/Qt6/plugins/platforms/qwindowsd.dll"
-        "$<TARGET_FILE_DIR:scrambler>/platforms/"
+    "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/Qt6/plugins/platforms/qwindows.dll"
+    "$<TARGET_FILE_DIR:scrambler>/platforms/"
 )
 
 if (SCRAMBLER_ENABLE_TESTS)

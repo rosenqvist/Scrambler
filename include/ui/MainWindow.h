@@ -8,10 +8,13 @@
 #include <QLineEdit>
 #include <QMainWindow>
 #include <QPushButton>
+#include <QSlider>
+#include <QSpinBox>
 #include <QTimer>
 #include <QTreeWidget>
 
 #include <memory>
+
 
 namespace scrambler::ui
 {
@@ -47,6 +50,12 @@ private:  // NOLINT(readability-redundant-access-specifiers)
     QLineEdit* process_filter_ = nullptr;
     QLabel* status_label_ = nullptr;
     QTimer* refresh_timer_ = nullptr;
+
+    // Effect controls
+    QSlider* delay_slider_ = nullptr;
+    QSpinBox* delay_spinbox_ = nullptr;
+    QSlider* drop_slider_ = nullptr;
+    QLabel* drop_label_ = nullptr;
 
     // Core pipeline
     core::TargetSet targets_;
