@@ -75,6 +75,26 @@ add_custom_command(TARGET scrambler POST_BUILD
 if (SCRAMBLER_ENABLE_TESTS)
     enable_testing()
     find_package(GTest CONFIG REQUIRED)
+
+    add_executable(scrambler_tests
+        tests/FiveTupleTest.cpp
+        tests/TargetSetTest.cpp
+        tests/EffectConfigTest.cpp
+    )
+
+    target_include_directories(scrambler_tests PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+    )
+
+    target_link_libraries(scrambler_tests PRIVATE
+        GTest::gtest_main
+        WinDivert
+        scrambler_warnings
+        scrambler_sanitizers
+    )
+
+    include(GoogleTest)
+    gtest_discover_tests(scrambler_tests)
 endif()
 
 install(TARGETS scrambler RUNTIME DESTINATION .)
