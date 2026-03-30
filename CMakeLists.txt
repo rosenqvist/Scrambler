@@ -50,6 +50,9 @@ set_target_properties(WinDivert PROPERTIES
 
 add_executable(scrambler
     src/main.cpp
+    src/core/FlowTracker.cpp
+    src/core/PacketInterceptor.cpp
+    src/core/DelayQueue.cpp
 )
 
 target_include_directories(scrambler PRIVATE ${CMAKE_SOURCE_DIR}/include)
