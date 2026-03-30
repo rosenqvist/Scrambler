@@ -7,6 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+find_package(Qt6 REQUIRED COMPONENTS Widgets)
+qt_standard_project_setup()
+
 option(SCRAMBLER_ENABLE_TESTS "Build unit tests" ON)
 option(SCRAMBLER_ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(SCRAMBLER_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
@@ -53,15 +56,29 @@ add_executable(scrambler
     src/core/FlowTracker.cpp
     src/core/PacketInterceptor.cpp
     src/core/DelayQueue.cpp
+    src/ui/MainWindow.cpp
+    include/ui/MainWindow.h
 )
+
+if (WIN32)
+    target_sources(scrambler PRIVATE
+        ${CMAKE_SOURCE_DIR}/resources/scrambler.manifest
+    )
+
+    target_link_options(scrambler PRIVATE
+        "/MANIFEST:NO"
+    )
+endif()
 
 target_include_directories(scrambler PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
 target_link_libraries(scrambler PRIVATE
+    Qt6::Widgets
     WinDivert
     scrambler_warnings
     scrambler_sanitizers
 )
+
 
 add_custom_command(TARGET scrambler POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -70,6 +87,11 @@ add_custom_command(TARGET scrambler POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/third_party/windivert/x64/WinDivert64.sys"
         "$<TARGET_FILE_DIR:scrambler>"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:scrambler>/platforms"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/debug/Qt6/plugins/platforms/qwindowsd.dll"
+        "$<TARGET_FILE_DIR:scrambler>/platforms/"
 )
 
 if (SCRAMBLER_ENABLE_TESTS)
