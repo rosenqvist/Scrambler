@@ -3,10 +3,12 @@
 #include <gtest/gtest.h>
 #include <unordered_set>
 
-namespace scrambler::core
-{
+using scrambler::core::FiveTuple;
+using scrambler::core::FiveTupleHash;
 
-TEST(FiveTuple, EqualTuplesCompareEqual)
+// Equality
+
+TEST(FiveTupleTest, EqualTuplesCompareEqual)
 {
     FiveTuple a{.src_addr = 100, .dst_addr = 200, .src_port = 3000, .dst_port = 4000, .protocol = 17};
     FiveTuple b{.src_addr = 100, .dst_addr = 200, .src_port = 3000, .dst_port = 4000, .protocol = 17};
@@ -14,7 +16,7 @@ TEST(FiveTuple, EqualTuplesCompareEqual)
     EXPECT_EQ(a, b);
 }
 
-TEST(FiveTuple, DifferentFieldsMakeUnequal)
+TEST(FiveTupleTest, DifferentFieldsMakeUnequal)
 {
     FiveTuple base{.src_addr = 100, .dst_addr = 200, .src_port = 3000, .dst_port = 4000, .protocol = 17};
 
@@ -31,7 +33,9 @@ TEST(FiveTuple, DifferentFieldsMakeUnequal)
     EXPECT_NE(base, diff_protocol);
 }
 
-TEST(FiveTuple, ReversedSwapsSrcAndDst)
+//  Reversed Tuple
+
+TEST(FiveTupleTest, ReversedSwapsSrcAndDst)
 {
     FiveTuple original{.src_addr = 100, .dst_addr = 200, .src_port = 3000, .dst_port = 4000, .protocol = 17};
     auto reversed = original.Reversed();
@@ -43,31 +47,30 @@ TEST(FiveTuple, ReversedSwapsSrcAndDst)
     EXPECT_EQ(reversed.protocol, original.protocol);
 }
 
-TEST(FiveTuple, ReversedTwiceGivesOriginal)
+TEST(FiveTupleTest, ReversedRoundTripGivesOriginal)
 {
     FiveTuple original{.src_addr = 100, .dst_addr = 200, .src_port = 3000, .dst_port = 4000, .protocol = 17};
 
     EXPECT_EQ(original.Reversed().Reversed(), original);
 }
 
-TEST(FiveTuple, ReversedIsNotEqualToOriginal)
+TEST(FiveTupleTest, ReversedIsNotEqualToOriginal)
 {
     FiveTuple original{.src_addr = 100, .dst_addr = 200, .src_port = 3000, .dst_port = 4000, .protocol = 17};
 
     EXPECT_NE(original, original.Reversed());
 }
 
-TEST(FiveTuple, SymmetricTupleReversesToItself)
+TEST(FiveTupleTest, SymmetricTupleReversesToItself)
 {
-    // Edge case where we have the same address and port in both directions
     FiveTuple symmetric{.src_addr = 100, .dst_addr = 100, .src_port = 3000, .dst_port = 3000, .protocol = 17};
 
     EXPECT_EQ(symmetric, symmetric.Reversed());
 }
 
-// Hash tests
+//  Hash Quality
 
-TEST(FiveTupleHash, EqualTuplesProduceSameHash)
+TEST(FiveTupleTest, EqualTuplesProduceSameHash)
 {
     FiveTuple a{.src_addr = 100, .dst_addr = 200, .src_port = 3000, .dst_port = 4000, .protocol = 17};
     FiveTuple b{.src_addr = 100, .dst_addr = 200, .src_port = 3000, .dst_port = 4000, .protocol = 17};
@@ -76,18 +79,50 @@ TEST(FiveTupleHash, EqualTuplesProduceSameHash)
     EXPECT_EQ(hasher(a), hasher(b));
 }
 
-TEST(FiveTupleHash, DifferentTuplesProduceDifferentHashes)
+TEST(FiveTupleTest, SingleFieldDifferencesProduceDifferentHashes)
 {
     FiveTupleHash hasher;
 
-    FiveTuple a{.src_addr = 100, .dst_addr = 200, .src_port = 3000, .dst_port = 4000, .protocol = 17};
-    FiveTuple b{.src_addr = 100, .dst_addr = 200, .src_port = 3001, .dst_port = 4000, .protocol = 17};
+    FiveTuple base{.src_addr = 100, .dst_addr = 200, .src_port = 3000, .dst_port = 4000, .protocol = 17};
 
-    // Not guaranteed but a good hash should differ here
-    EXPECT_NE(hasher(a), hasher(b));
+    FiveTuple diff_src = base;
+    diff_src.src_addr = 999;
+
+    FiveTuple diff_dst = base;
+    diff_dst.dst_port = 4001;
+
+    FiveTuple diff_proto = base;
+    diff_proto.protocol = 6;
+
+    EXPECT_NE(hasher(base), hasher(diff_src));
+    EXPECT_NE(hasher(base), hasher(diff_dst));
+    EXPECT_NE(hasher(base), hasher(diff_proto));
+    EXPECT_NE(hasher(diff_src), hasher(diff_dst));
 }
 
-TEST(FiveTupleHash, WorksAsUnorderedMapKey)
+TEST(FiveTupleTest, ReversedTupleHashesDifferently)
+{
+    FiveTupleHash hasher;
+    FiveTuple t{.src_addr = 100, .dst_addr = 200, .src_port = 3000, .dst_port = 4000, .protocol = 17};
+
+    EXPECT_NE(hasher(t), hasher(t.Reversed()));
+}
+
+TEST(FiveTupleTest, NearbyPortsDontCollide)
+{
+    FiveTupleHash hasher;
+    std::unordered_set<std::size_t> hashes;
+
+    for (uint16_t port = 27000; port < 27050; ++port)
+    {
+        FiveTuple t{.src_addr = 100, .dst_addr = 200, .src_port = port, .dst_port = 4000, .protocol = 17};
+        hashes.insert(hasher(t));
+    }
+
+    EXPECT_EQ(hashes.size(), 50);
+}
+
+TEST(FiveTupleTest, WorksAsUnorderedMapKey)
 {
     std::unordered_map<FiveTuple, int, FiveTupleHash> map;
 
@@ -101,30 +136,3 @@ TEST(FiveTupleHash, WorksAsUnorderedMapKey)
     EXPECT_EQ(map[a], 1);
     EXPECT_EQ(map[b], 2);
 }
-
-TEST(FiveTupleHash, ReversedTupleHashesDifferently)
-{
-    FiveTupleHash hasher;
-    FiveTuple t{.src_addr = 100, .dst_addr = 200, .src_port = 3000, .dst_port = 4000, .protocol = 17};
-
-    // Forward and reverse should land in different buckets
-    EXPECT_NE(hasher(t), hasher(t.Reversed()));
-}
-
-TEST(FiveTupleHash, NearbyPortsDontCollide)
-{
-    FiveTupleHash hasher;
-    std::unordered_set<std::size_t> hashes;
-
-    // Check ports incrementing by 1
-    // A weak hash would collapse these
-    for (uint16_t port = 27000; port < 27050; ++port)
-    {
-        FiveTuple t{.src_addr = 100, .dst_addr = 200, .src_port = port, .dst_port = 4000, .protocol = 17};
-        hashes.insert(hasher(t));
-    }
-
-    EXPECT_EQ(hashes.size(), 50);
-}
-
-}  // namespace scrambler::core

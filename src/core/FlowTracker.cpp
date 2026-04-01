@@ -6,8 +6,6 @@
 #include <print>
 #include <vector>
 
-#pragma comment(lib, "iphlpapi.lib")
-
 namespace scrambler::core
 {
 
@@ -84,6 +82,11 @@ void FlowTracker::Stop()
     {
         WinDivertClose(handle_);
         handle_ = INVALID_HANDLE_VALUE;
+    }
+
+    if (thread_.joinable())
+    {
+        thread_.join();
     }
 }
 

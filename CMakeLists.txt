@@ -9,7 +9,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 qt_standard_project_setup()
-set(app_icon_resource_windows "${CMAKE_CURRENT_SOURCE_DIR}/resources/placeholder.ico")
 
 option(SCRAMBLER_ENABLE_TESTS "Build unit tests" ON)
 option(SCRAMBLER_ENABLE_ASAN "Enable AddressSanitizer" OFF)
@@ -58,7 +57,19 @@ add_executable(scrambler
     src/core/PacketInterceptor.cpp
     src/core/DelayQueue.cpp
     src/ui/MainWindow.cpp
+    src/ui/HotkeyManager.cpp
+    src/platform/ProcessEnumerator.cpp
     include/ui/MainWindow.h
+    include/ui/HotkeyManager.h
+    include/ui/HotkeyEdit.h
+)
+
+# Embed icon directly into the binary
+qt_add_resources(scrambler "app_icons"
+    PREFIX "/icons"
+    BASE "resources"
+    FILES
+        resources/scrambler_icon_256.png
 )
 
 if (WIN32)
@@ -76,11 +87,15 @@ target_include_directories(scrambler PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(scrambler PRIVATE
     Qt6::Widgets
     WinDivert
+    winmm
+    dwmapi
+    ws2_32
+    iphlpapi
     scrambler_warnings
     scrambler_sanitizers
 )
 
-
+# Copy WinDivert runtime files next to the executable
 add_custom_command(TARGET scrambler POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/third_party/windivert/x64/WinDivert.dll"
@@ -88,12 +103,17 @@ add_custom_command(TARGET scrambler POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/third_party/windivert/x64/WinDivert64.sys"
         "$<TARGET_FILE_DIR:scrambler>"
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-        "$<TARGET_FILE_DIR:scrambler>/platforms"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/Qt6/plugins/platforms/qwindows.dll"
-    "$<TARGET_FILE_DIR:scrambler>/platforms/"
 )
+
+# Deploy Qt runtime DLLs and plugins for distribution
+if (WIN32)
+    qt_generate_deploy_app_script(
+        TARGET scrambler
+        OUTPUT_SCRIPT deploy_script
+        NO_UNSUPPORTED_PLATFORM_ERROR
+    )
+    install(SCRIPT ${deploy_script})
+endif()
 
 if (SCRAMBLER_ENABLE_TESTS)
     enable_testing()
@@ -103,6 +123,8 @@ if (SCRAMBLER_ENABLE_TESTS)
         tests/FiveTupleTest.cpp
         tests/TargetSetTest.cpp
         tests/EffectConfigTest.cpp
+        tests/ProcessEnumeratorTest.cpp
+        src/platform/ProcessEnumerator.cpp
     )
 
     target_include_directories(scrambler_tests PRIVATE
@@ -112,8 +134,17 @@ if (SCRAMBLER_ENABLE_TESTS)
     target_link_libraries(scrambler_tests PRIVATE
         GTest::gtest_main
         WinDivert
+        ws2_32
+        iphlpapi
         scrambler_warnings
         scrambler_sanitizers
+    )
+
+    # Copy WinDivert DLL next to test executable so it can load at runtime
+    add_custom_command(TARGET scrambler_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/third_party/windivert/x64/WinDivert.dll"
+            "$<TARGET_FILE_DIR:scrambler_tests>"
     )
 
     include(GoogleTest)
