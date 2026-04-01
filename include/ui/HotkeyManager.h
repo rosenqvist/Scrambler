@@ -1,6 +1,5 @@
 #pragma once
 
-#include <QAbstractNativeEventFilter>
 #include <QKeySequence>
 #include <QObject>
 
@@ -35,7 +34,7 @@ struct HotkeyBinding
     }
 };
 
-class HotkeyManager : public QObject, public QAbstractNativeEventFilter
+class HotkeyManager : public QObject
 {
     Q_OBJECT
 
@@ -53,11 +52,8 @@ public:
 
     void RegisterAll();
     void UnregisterAll();
-
     void SaveSettings();
     void LoadSettings();
-
-    bool nativeEventFilter(const QByteArray& event_type, void* message, qintptr* result) override;
 
     static HotkeyBinding FromKeySequence(const QKeySequence& seq);
     static QKeySequence ToKeySequence(const HotkeyBinding& binding);
@@ -66,9 +62,20 @@ signals:
     void HotkeyTriggered(HotkeyAction action);
 
 private:
-    static constexpr int kBaseId = 0xBF00;
+    void CheckAndTrigger(UINT vk, UINT modifiers);
+    static UINT GetCurrentModifiers();
+
+    // Hook Callbacks
+    static LRESULT CALLBACK KeyboardHookProc(int n_code, WPARAM w_param, LPARAM l_param);
+    static LRESULT CALLBACK MouseHookProc(int n_code, WPARAM w_param, LPARAM l_param);
+
     std::array<HotkeyBinding, kHotkeyActionCount> bindings_{};
     bool registered_ = false;
+
+    // Hook state
+    static HotkeyManager* instance;  // Needed so static callbacks can emit signals
+    static HHOOK keyboard_hook;
+    static HHOOK mouse_hook;
 };
 
 }  // namespace scrambler::ui

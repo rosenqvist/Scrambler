@@ -2,8 +2,15 @@
 
 #include "ui/HotkeyManager.h"
 
+#include <qevent.h>
 #include <QKeyEvent>
 #include <QLineEdit>
+#include <qnamespace.h>
+
+#include <windows.h>
+
+#include <minwindef.h>
+#include <winuser.h>
 
 namespace scrambler::ui
 {
@@ -34,6 +41,48 @@ signals:
     void BindingChanged(const HotkeyBinding& binding);
 
 protected:
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        UINT vk = 0;
+        switch (event->button())
+        {
+            case Qt::XButton1:
+                vk = VK_XBUTTON1;
+                break;
+            case Qt::XButton2:
+                vk = VK_XBUTTON2;
+                break;
+
+            // Disallow, left,right and middle button clicks
+            // binding these will cause a UX nightmare
+            case Qt::LeftButton:
+            case Qt::RightButton:
+            case Qt::MiddleButton:
+            default:
+                return;
+        }
+
+        // Capture modifiers (like Ctrl + Mouse 4)
+        UINT hotkey_mods = 0;
+        if ((event->modifiers() & Qt::ControlModifier) != 0)
+        {
+            hotkey_mods |= MOD_CONTROL;
+        }
+        if ((event->modifiers() & Qt::ShiftModifier) != 0)
+        {
+            hotkey_mods |= MOD_SHIFT;
+        }
+        if ((event->modifiers() & Qt::AltModifier) != 0)
+        {
+            hotkey_mods |= MOD_ALT;
+        }
+
+        binding_.vk = vk;
+        binding_.modifiers = hotkey_mods;
+        setText(BindingToString(binding_));
+        emit BindingChanged(binding_);
+    }
+
     void keyPressEvent(QKeyEvent* event) override
     {
         auto key = static_cast<UINT>(event->nativeVirtualKey());
@@ -93,18 +142,40 @@ private:
             parts << "Shift";
         }
 
-        // Map VK to a readable name
-        UINT scan = MapVirtualKeyW(binding.vk, MAPVK_VK_TO_VSC);
-        std::array<wchar_t, 64> name{};
-        // GetKeyNameTextW expects the scan code in bits 16-23
-        // and the extended flag in bit 24
-        if (GetKeyNameTextW(static_cast<LONG>(scan) << 16, name.data(), static_cast<int>(name.size())) > 0)
+        // manually handle mouse names
+        if (binding.vk == VK_LBUTTON)
         {
-            parts << QString::fromWCharArray(name.data());
+            parts << "Left Click";
+        }
+        else if (binding.vk == VK_RBUTTON)
+        {
+            parts << "Right Click";
+        }
+        else if (binding.vk == VK_MBUTTON)
+        {
+            parts << "Middle Click";
+        }
+        else if (binding.vk == VK_XBUTTON1)
+        {
+            parts << "Mouse 4";
+        }
+        else if (binding.vk == VK_XBUTTON2)
+        {
+            parts << "Mouse 5";
         }
         else
         {
-            parts << QString::number(binding.vk);
+            // Keep your existing MapVirtualKeyW logic here for standard keys
+            UINT scan = MapVirtualKeyW(binding.vk, MAPVK_VK_TO_VSC);
+            std::array<wchar_t, 64> name{};
+            if (GetKeyNameTextW(static_cast<LONG>(scan) << 16, name.data(), static_cast<int>(name.size())) > 0)
+            {
+                parts << QString::fromWCharArray(name.data());
+            }
+            else
+            {
+                parts << QString::number(binding.vk);
+            }
         }
 
         return parts.join("+");

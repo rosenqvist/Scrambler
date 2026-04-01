@@ -1,10 +1,20 @@
 #include "ui/HotkeyManager.h"
 
 #include <QApplication>
+#include <qnamespace.h>
+#include <qscreen_platform.h>
 #include <QSettings>
+#include <qwidget.h>
+#include <QWindow>
+
+#include <winuser.h>
 
 namespace scrambler::ui
 {
+
+HotkeyManager* HotkeyManager::instance = nullptr;
+HHOOK HotkeyManager::keyboard_hook = nullptr;
+HHOOK HotkeyManager::mouse_hook = nullptr;
 
 namespace
 {
@@ -221,7 +231,7 @@ Qt::KeyboardModifiers Win32ModsToQt(UINT mods)
 
 HotkeyManager::HotkeyManager(QObject* parent) : QObject(parent)
 {
-    QApplication::instance()->installNativeEventFilter(this);
+    instance = this;  // Set the singleton pointer
     LoadSettings();
     RegisterAll();
 }
@@ -229,7 +239,7 @@ HotkeyManager::HotkeyManager(QObject* parent) : QObject(parent)
 HotkeyManager::~HotkeyManager()
 {
     UnregisterAll();
-    QApplication::instance()->removeNativeEventFilter(this);
+    instance = nullptr;
 }
 
 void HotkeyManager::SetBinding(HotkeyAction action, const HotkeyBinding& binding)
@@ -272,15 +282,10 @@ void HotkeyManager::RegisterAll()
         UnregisterAll();
     }
 
-    for (int i = 0; i < kHotkeyActionCount; ++i)
-    {
-        const auto& binding = bindings_.at(static_cast<std::size_t>(i));
-        if (binding.IsValid())
-        {
-            // MOD_NOREPEAT prevents repeated WM_HOTKEY messages when the key is held
-            RegisterHotKey(nullptr, kBaseId + i, binding.modifiers | MOD_NOREPEAT, binding.vk);
-        }
-    }
+    // Install low level hooks for keyboard and mouse
+    keyboard_hook = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardHookProc, GetModuleHandle(nullptr), 0);
+    mouse_hook = SetWindowsHookEx(WH_MOUSE_LL, MouseHookProc, GetModuleHandle(nullptr), 0);
+
     registered_ = true;
 }
 
@@ -291,11 +296,112 @@ void HotkeyManager::UnregisterAll()
         return;
     }
 
+    if (keyboard_hook)
+    {
+        UnhookWindowsHookEx(keyboard_hook);
+    }
+    if (mouse_hook)
+    {
+        UnhookWindowsHookEx(mouse_hook);
+    }
+
+    keyboard_hook = nullptr;
+    mouse_hook = nullptr;
+    registered_ = false;
+}
+
+// Helper to check the current state of modifiers at the time of a click/keypress
+UINT HotkeyManager::GetCurrentModifiers()
+{
+    UINT mods = 0;
+    if ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0)
+    {
+        mods |= MOD_CONTROL;
+    }
+    if ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0)
+    {
+        mods |= MOD_SHIFT;
+    }
+    if ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0)
+    {
+        mods |= MOD_ALT;
+    }
+    return mods;
+}
+
+void HotkeyManager::CheckAndTrigger(UINT vk, UINT modifiers)
+{
+    HWND foreground_win = GetForegroundWindow();
+
+    HWND my_win = nullptr;
+    if (auto* active_win = QApplication::activeWindow())
+    {
+        my_win = reinterpret_cast<HWND>(active_win->winId());  // NOLINT(performance-no-int-to-ptr)
+    }
+
+    if (foreground_win == my_win)
+    {
+        return;
+    }
+
     for (int i = 0; i < kHotkeyActionCount; ++i)
     {
-        UnregisterHotKey(nullptr, kBaseId + i);
+        const auto& binding = bindings_.at(static_cast<std::size_t>(i));
+        if (binding.IsValid() && binding.vk == vk && binding.modifiers == modifiers)
+        {
+            emit HotkeyTriggered(static_cast<HotkeyAction>(i));
+        }
     }
-    registered_ = false;
+}
+
+LRESULT CALLBACK HotkeyManager::KeyboardHookProc(int n_code, WPARAM w_param, LPARAM l_param)
+{
+    if (n_code >= 0 && (w_param == WM_KEYDOWN || w_param == WM_SYSKEYDOWN) && instance)
+    {
+        auto hook_struct = reinterpret_cast<KBDLLHOOKSTRUCT&>(l_param);
+        UINT vk = hook_struct.vkCode;
+
+        // Ignore pure modifier presses
+        if (vk != VK_CONTROL && vk != VK_SHIFT && vk != VK_MENU && vk != VK_LCONTROL && vk != VK_RCONTROL
+            && vk != VK_LSHIFT && vk != VK_RSHIFT && vk != VK_LMENU && vk != VK_RMENU)
+        {
+            instance->CheckAndTrigger(vk, GetCurrentModifiers());
+        }
+    }
+
+    return CallNextHookEx(keyboard_hook, n_code, w_param, l_param);
+}
+
+LRESULT CALLBACK HotkeyManager::MouseHookProc(int n_code, WPARAM w_param, LPARAM l_param)
+{
+    if (n_code >= 0 && instance)
+    {
+        UINT vk = 0;
+        if (w_param == WM_LBUTTONDOWN)
+        {
+            vk = VK_LBUTTON;
+        }
+        else if (w_param == WM_RBUTTONDOWN)
+        {
+            vk = VK_RBUTTON;
+        }
+        else if (w_param == WM_MBUTTONDOWN)
+        {
+            vk = VK_MBUTTON;
+        }
+        else if (w_param == WM_XBUTTONDOWN)
+        {
+            auto hook_struct = reinterpret_cast<MSLLHOOKSTRUCT&>(l_param);
+            vk = (HIWORD(hook_struct.mouseData) == XBUTTON1) ? VK_XBUTTON1 : VK_XBUTTON2;
+        }
+
+        if (vk != 0)
+        {
+            instance->CheckAndTrigger(vk, GetCurrentModifiers());
+        }
+    }
+    // ALWAYS call next hook to ensure the game receives the mouse clicks
+    return CallNextHookEx(mouse_hook, n_code, w_param, l_param);
 }
 
 void HotkeyManager::SaveSettings()
@@ -360,27 +466,6 @@ QKeySequence HotkeyManager::ToKeySequence(const HotkeyBinding& binding)
     }
 
     return {QKeyCombination(Win32ModsToQt(binding.modifiers), static_cast<Qt::Key>(qt_key))};
-}
-
-bool HotkeyManager::nativeEventFilter(const QByteArray& event_type, void* message, qintptr* /*result*/)
-{
-    if (event_type != "windows_generic_MSG")
-    {
-        return false;
-    }
-
-    auto* msg = static_cast<MSG*>(message);
-    if (msg->message != WM_HOTKEY)
-    {
-        return false;
-    }
-
-    int id = static_cast<int>(msg->wParam) - kBaseId;
-    if (id >= 0 && id < kHotkeyActionCount)
-    {
-        emit HotkeyTriggered(static_cast<HotkeyAction>(id));
-    }
-    return true;
 }
 
 }  // namespace scrambler::ui
