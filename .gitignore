@@ -29,6 +29,9 @@ moc_*
 qrc_*
 ui_*
 
+# Allow WinDivert third-party binaries
+!third_party/windivert/**
+
 Thumbs.db
 desktop.ini
 .DS_Store
