@@ -8,9 +8,27 @@ on:
 
 env:
   VCPKG_DEFAULT_TRIPLET: x64-windows
-  CMAKE_BUILD_TYPE: Release
 
 jobs:
+  format-check:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check formatting
+        run: |
+          $cf = Get-ChildItem "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter "clang-format.exe" |
+                Where-Object { $_.FullName -like '*Llvm\x64*' } |
+                Select-Object -First 1 -ExpandProperty FullName
+          Write-Host "Using: $cf"
+          & $cf --version
+          $files = @(git ls-files -- '*.cpp' '*.h' ':!:third_party/**')
+          if ($files.Count -gt 0) {
+            & $cf --dry-run --Werror --style=file $files
+          }
+
   build-and-test:
     runs-on: windows-latest
 
