@@ -6,12 +6,10 @@
 #include <cstdint>
 #include <winsock.h>
 
-#pragma comment(lib, "Ws2_32.lib")
-
 namespace scrambler::core
 {
 
-constexpr uint32_t kMaxPacketSize = 65535;
+[[maybe_unused]] constexpr uint32_t kMaxPacketSize = 65535;
 constexpr uint32_t kIpStringLength = 64;
 // WinDivert stores addresses as 4-element arrays for IPv6 compatibility.
 // For IPv4 the address sits in element 0 only.
@@ -21,7 +19,7 @@ constexpr int kIPv4AddressIndex = 0;
 constexpr std::size_t kGoldenRatio = 0x9e3779b9;
 // the pid of the windows System process: "System".
 // We try to exclude network activity from this process since its mostly noise.
-constexpr uint32_t kSystemPid = 4;
+[[maybe_unused]] constexpr uint32_t kSystemPid = 4;
 
 struct FiveTuple
 {
@@ -33,7 +31,7 @@ struct FiveTuple
 
     bool operator==(const FiveTuple&) const = default;
 
-    FiveTuple Reversed() const
+    [[nodiscard]] FiveTuple Reversed() const
     {
         return {.src_addr = dst_addr,
                 .dst_addr = src_addr,

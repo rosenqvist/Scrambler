@@ -2,19 +2,20 @@
 
 #include <gtest/gtest.h>
 
-namespace scrambler::core
-{
+using scrambler::core::Direction;
+using scrambler::core::EffectConfig;
+using scrambler::core::ShouldDrop;
 
-// Delay tests
+//  Delays
 
-TEST(EffectConfig, DefaultDelayIsZero)
+TEST(EffectConfigTest, DefaultDelayIsZero)
 {
     EffectConfig effects;
 
     EXPECT_EQ(effects.Delay().count(), 0);
 }
 
-TEST(EffectConfig, DelayReflectsStoredValue)
+TEST(EffectConfigTest, DelayReflectsStoredValue)
 {
     EffectConfig effects;
     effects.delay_ms.store(150);
@@ -22,7 +23,7 @@ TEST(EffectConfig, DelayReflectsStoredValue)
     EXPECT_EQ(effects.Delay().count(), 150);
 }
 
-TEST(EffectConfig, DelayCanBeUpdatedAtRuntime)
+TEST(EffectConfigTest, DelayCanBeUpdatedAtRuntime)
 {
     EffectConfig effects;
     effects.delay_ms.store(100);
@@ -32,75 +33,65 @@ TEST(EffectConfig, DelayCanBeUpdatedAtRuntime)
     EXPECT_EQ(effects.Delay().count(), 500);
 }
 
-//  Drop rate tests
+// Drop rate
 
-TEST(EffectConfig, ZeroDropRateNeverDrops)
+TEST(EffectConfigTest, DefaultDropRateIsZero)
 {
     EffectConfig effects;
-    effects.drop_rate.store(0.0F);
 
-    // Should never return true at 0%
+    EXPECT_FLOAT_EQ(effects.drop_rate.load(), 0.0F);
+}
+
+TEST(EffectConfigTest, ZeroDropRateNeverDrops)
+{
     for (int i = 0; i < 10000; ++i)
     {
-        EXPECT_FALSE(effects.ShouldDrop());
+        EXPECT_FALSE(ShouldDrop(0.0F));
     }
 }
 
-TEST(EffectConfig, NegativeDropRateNeverDrops)
+TEST(EffectConfigTest, NegativeDropRateNeverDrops)
 {
-    EffectConfig effects;
-    effects.drop_rate.store(-0.5F);
-
     for (int i = 0; i < 1000; ++i)
     {
-        EXPECT_FALSE(effects.ShouldDrop());
+        EXPECT_FALSE(ShouldDrop(-0.5F));
     }
 }
 
-TEST(EffectConfig, FullDropRateAlwaysDrops)
+TEST(EffectConfigTest, FullDropRateAlwaysDrops)
 {
-    EffectConfig effects;
-    effects.drop_rate.store(1.0F);
-
     for (int i = 0; i < 10000; ++i)
     {
-        EXPECT_TRUE(effects.ShouldDrop());
+        EXPECT_TRUE(ShouldDrop(1.0F));
     }
 }
 
-TEST(EffectConfig, FiftyPercentDropRateIsRoughlyHalf)
+TEST(EffectConfigTest, FiftyPercentDropRateIsRoughlyHalf)
 {
-    EffectConfig effects;
-    effects.drop_rate.store(0.5F);
-
     int dropped = 0;
     constexpr int kTrials = 100000;
 
     for (int i = 0; i < kTrials; ++i)
     {
-        if (effects.ShouldDrop())
+        if (ShouldDrop(0.5F))
         {
             ++dropped;
         }
     }
 
-    // With 100k trials at 50% we should be well within 45-55%
     double ratio = static_cast<double>(dropped) / kTrials;
     EXPECT_GT(ratio, 0.45);
     EXPECT_LT(ratio, 0.55);
 }
 
-TEST(EffectConfig, TenPercentDropRateIsRoughlyTenPercent)
+TEST(EffectConfigTest, TenPercentDropRateIsRoughlyTenPercent)
 {
-    EffectConfig effects;
-    effects.drop_rate.store(0.1F);
-
     int dropped = 0;
     constexpr int kTrials = 100000;
 
     for (int i = 0; i < kTrials; ++i)
     {
-        if (effects.ShouldDrop())
+        if (ShouldDrop(0.1F))
         {
             ++dropped;
         }
@@ -111,11 +102,85 @@ TEST(EffectConfig, TenPercentDropRateIsRoughlyTenPercent)
     EXPECT_LT(ratio, 0.13);
 }
 
-TEST(EffectConfig, DefaultDropRateIsZero)
+//  Delay directions
+
+TEST(EffectConfigTest, DefaultDelayDirectionIsBoth)
 {
     EffectConfig effects;
 
-    EXPECT_FLOAT_EQ(effects.drop_rate.load(), 0.0F);
+    EXPECT_TRUE(effects.MatchesDelayDirection(true));
+    EXPECT_TRUE(effects.MatchesDelayDirection(false));
 }
 
-}  // namespace scrambler::core
+TEST(EffectConfigTest, DelayOutboundMatchesOutboundOnly)
+{
+    EffectConfig effects;
+    effects.delay_direction.store(Direction::kOutbound);
+
+    EXPECT_TRUE(effects.MatchesDelayDirection(true));
+    EXPECT_FALSE(effects.MatchesDelayDirection(false));
+}
+
+TEST(EffectConfigTest, DelayInboundMatchesInboundOnly)
+{
+    EffectConfig effects;
+    effects.delay_direction.store(Direction::kInbound);
+
+    EXPECT_FALSE(effects.MatchesDelayDirection(true));
+    EXPECT_TRUE(effects.MatchesDelayDirection(false));
+}
+
+// Drop direction
+
+TEST(EffectConfigTest, DefaultDropDirectionIsBoth)
+{
+    EffectConfig effects;
+
+    EXPECT_TRUE(effects.MatchesDropDirection(true));
+    EXPECT_TRUE(effects.MatchesDropDirection(false));
+}
+
+TEST(EffectConfigTest, DropOutboundMatchesOutboundOnly)
+{
+    EffectConfig effects;
+    effects.drop_direction.store(Direction::kOutbound);
+
+    EXPECT_TRUE(effects.MatchesDropDirection(true));
+    EXPECT_FALSE(effects.MatchesDropDirection(false));
+}
+
+TEST(EffectConfigTest, DropInboundMatchesInboundOnly)
+{
+    EffectConfig effects;
+    effects.drop_direction.store(Direction::kInbound);
+
+    EXPECT_FALSE(effects.MatchesDropDirection(true));
+    EXPECT_TRUE(effects.MatchesDropDirection(false));
+}
+
+//  Independent directions
+
+TEST(EffectConfigTest, DelayAndDropDirectionsAreIndependent)
+{
+    EffectConfig effects;
+    effects.delay_direction.store(Direction::kInbound);
+    effects.drop_direction.store(Direction::kOutbound);
+
+    EXPECT_FALSE(effects.MatchesDelayDirection(true));
+    EXPECT_TRUE(effects.MatchesDelayDirection(false));
+    EXPECT_TRUE(effects.MatchesDropDirection(true));
+    EXPECT_FALSE(effects.MatchesDropDirection(false));
+}
+
+// Default State
+TEST(EffectConfigTest, DefaultsAreInert)
+{
+    EffectConfig effects;
+
+    EXPECT_EQ(effects.delay_ms.load(), 0);
+    EXPECT_EQ(effects.drop_rate.load(), 0.0F);
+    EXPECT_EQ(effects.delay_direction.load(), Direction::kBoth);
+    EXPECT_EQ(effects.drop_direction.load(), Direction::kBoth);
+    EXPECT_EQ(effects.Delay().count(), 0);
+    EXPECT_FALSE(ShouldDrop(effects.drop_rate.load()));
+}

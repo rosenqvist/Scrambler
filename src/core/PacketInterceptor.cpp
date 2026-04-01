@@ -55,6 +55,11 @@ void PacketInterceptor::Stop()
         handle_ = INVALID_HANDLE_VALUE;
     }
 
+    if (thread_.joinable())
+    {
+        thread_.join();
+    }
+
     delay_queue_.reset();
 }
 
@@ -65,14 +70,17 @@ bool PacketInterceptor::IsRunning() const
 
 void PacketInterceptor::Reinject(const uint8_t* data, UINT len, const WINDIVERT_ADDRESS& addr)
 {
-    WinDivertSend(handle_, data, len, nullptr, &addr);
+    if (WinDivertSend(handle_, data, len, nullptr, &addr) == 0)
+    {
+        std::println("[WARN] Reinject failed: {}", GetLastError());
+    }
 }
 
 // Main packet processing pipeline:
 // 1. Capture a UDP packet
-// 2. Parse headers, look up which process owns it
-// 3. If it belongs to a targeted PID, apply effects (drop or delay)
-// 4. Otherwise reinject immediately so non-targeted traffic is unaffected
+// 2. Parse headers and look up which process owns it
+// 3. If it belongs to a targeted PID we apply effects (drop or delay)
+// 4. Otherwise reinject immediately so non targeted traffic is unaffected
 void PacketInterceptor::CaptureLoop()
 {
     std::array<uint8_t, kMaxPacketSize> packet{};
@@ -104,13 +112,9 @@ void PacketInterceptor::CaptureLoop()
             continue;
         }
 
-        if (!effects_.MatchesDirection(addr.Outbound != 0))
-        {
-            Reinject(packet.data(), len, addr);
-            continue;
-        }
+        bool is_outbound = addr.Outbound != 0;
 
-        if (effects_.ShouldDrop())
+        if (effects_.MatchesDropDirection(is_outbound) && ShouldDrop(effects_.drop_rate.load()))
         {
             auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
             std::println("[DROP]  PID {:>5} | {}:{} -> {}:{} ({} bytes)",
@@ -124,7 +128,7 @@ void PacketInterceptor::CaptureLoop()
         }
 
         auto delay = effects_.Delay();
-        if (delay.count() > 0)
+        if (delay.count() > 0 && effects_.MatchesDelayDirection(is_outbound))
         {
             auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
             std::println("[DELAY] PID {:>5} | {}:{} -> {}:{} ({} bytes) +{}ms",

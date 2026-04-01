@@ -1,6 +1,7 @@
 #include "core/DelayQueue.h"
 
 #include <cstring>
+#include <print>
 
 namespace scrambler::core
 {
@@ -65,7 +66,10 @@ void DelayQueue::Push(const uint8_t* data, UINT len, const WINDIVERT_ADDRESS& ad
 
 void DelayQueue::Reinject(const DelayedPacket& pkt)
 {
-    WinDivertSend(divert_handle_, pkt.data.data(), pkt.length, nullptr, &pkt.addr);
+    if (WinDivertSend(divert_handle_, pkt.data.data(), pkt.length, nullptr, &pkt.addr) == 0)
+    {
+        std::println("[WARN] DelayQueue reinject failed: {}", GetLastError());
+    }
 }
 
 void DelayQueue::DrainLoop()

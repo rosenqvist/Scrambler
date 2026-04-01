@@ -20,18 +20,20 @@ enum class Direction : std::uint8_t
 
 struct EffectConfig
 {
+public:
     std::atomic<int> delay_ms{0};
     std::atomic<float> drop_rate{0.0F};
-    std::atomic<Direction> direction{Direction::kBoth};
+    std::atomic<Direction> delay_direction{Direction::kBoth};
+    std::atomic<Direction> drop_direction{Direction::kBoth};
 
-    bool MatchesDirection(bool is_outbound) const
+    bool MatchesDelayDirection(bool is_outbound) const
     {
-        auto dir = direction.load();
-        if (dir == Direction::kBoth)
-        {
-            return true;
-        }
-        return (dir == Direction::kOutbound) == is_outbound;
+        return MatchesDirection(delay_direction.load(), is_outbound);
+    }
+
+    bool MatchesDropDirection(bool is_outbound) const
+    {
+        return MatchesDirection(drop_direction.load(), is_outbound);
     }
 
     std::chrono::milliseconds Delay() const
@@ -39,19 +41,27 @@ struct EffectConfig
         return std::chrono::milliseconds(delay_ms.load());
     }
 
-    bool ShouldDrop() const
+private:
+    static bool MatchesDirection(Direction dir, bool is_outbound)
     {
-        auto rate = drop_rate.load();
-        if (rate <= 0.0F)
+        if (dir == Direction::kBoth)
         {
-            return false;
+            return true;
         }
-        // thread_local so each capture thread gets its own RNG
-        // without needing a mutex
-        thread_local std::mt19937 rng{std::random_device{}()};
-        return std::uniform_real_distribution<float>(0.0F, 1.0F)(rng) < rate;
+        return (dir == Direction::kOutbound) == is_outbound;
     }
 };
+
+inline bool ShouldDrop(float rate)
+{
+    if (rate <= 0.0F)
+    {
+        return false;
+    }
+
+    thread_local std::mt19937 rng{std::random_device{}()};
+    return std::uniform_real_distribution<float>(0.0F, 1.0F)(rng) < rate;
+}
 
 class TargetSet
 {
@@ -72,6 +82,13 @@ public:
     {
         std::lock_guard lock(mutex_);
         pids_.clear();
+    }
+
+    void SetSingle(uint32_t pid)
+    {
+        std::lock_guard lock(mutex_);
+        pids_.clear();
+        pids_.insert(pid);
     }
 
     bool Contains(uint32_t pid) const
