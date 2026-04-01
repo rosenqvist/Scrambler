@@ -64,7 +64,12 @@ add_executable(scrambler
     include/ui/HotkeyEdit.h
 )
 
-# Embed icon directly into the binary
+# Hide console window in release builds
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+    set_target_properties(scrambler PROPERTIES WIN32_EXECUTABLE TRUE)
+endif()
+
+# Embed icon directly into binary
 qt_add_resources(scrambler "app_icons"
     PREFIX "/icons"
     BASE "resources"
@@ -72,9 +77,10 @@ qt_add_resources(scrambler "app_icons"
         resources/scrambler_icon_256.png
 )
 
+# Embed application manifest via resource file
 if (WIN32)
     target_sources(scrambler PRIVATE
-        ${CMAKE_SOURCE_DIR}/resources/scrambler.manifest
+        ${CMAKE_SOURCE_DIR}/resources/scrambler.rc
     )
 
     target_link_options(scrambler PRIVATE
@@ -95,7 +101,16 @@ target_link_libraries(scrambler PRIVATE
     scrambler_sanitizers
 )
 
-# Copy WinDivert runtime files next to the executable
+# Pick correct Qt platform plugin for the build type
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(QT_PLATFORM_DIR "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/debug/Qt6/plugins/platforms")
+    set(QT_PLATFORM_DLL "qwindowsd.dll")
+else()
+    set(QT_PLATFORM_DIR "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/Qt6/plugins/platforms")
+    set(QT_PLATFORM_DLL "qwindows.dll")
+endif()
+
+# Copy runtime dependencies next to the executable
 add_custom_command(TARGET scrambler POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/third_party/windivert/x64/WinDivert.dll"
@@ -103,6 +118,11 @@ add_custom_command(TARGET scrambler POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/third_party/windivert/x64/WinDivert64.sys"
         "$<TARGET_FILE_DIR:scrambler>"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:scrambler>/platforms"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${QT_PLATFORM_DIR}/${QT_PLATFORM_DLL}"
+        "$<TARGET_FILE_DIR:scrambler>/platforms/"
 )
 
 # Deploy Qt runtime DLLs and plugins for distribution

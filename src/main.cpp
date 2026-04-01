@@ -28,6 +28,8 @@ int main(int argc, char* argv[])
 
     QApplication::setWindowIcon(icon);
 
+    QApplication::setStyle("Fusion");
+
     // Grey/Warm theme
     QPalette palette;
     palette.setColor(QPalette::Window, QColor(226, 223, 218));

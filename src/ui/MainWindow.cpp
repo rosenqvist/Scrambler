@@ -95,31 +95,39 @@ void MainWindow::SetupUi()
     };
 
     // Delay row:
+    // Delay row
     auto* delay_layout = new QHBoxLayout();
-    delay_layout->addWidget(new QLabel("Delay (ms):"));
+    auto* delay_label = new QLabel("Delay (ms):");
+    delay_label->setFixedWidth(60);
+    delay_layout->addWidget(delay_label);
     delay_slider_ = new QSlider(Qt::Horizontal);
     delay_slider_->setRange(0, 1000);
     delay_slider_->setValue(0);
     delay_spinbox_ = new QSpinBox();
     delay_spinbox_->setRange(0, 1000);
     delay_spinbox_->setSuffix(" ms");
+    delay_spinbox_->setFixedWidth(60);
     delay_direction_combo_ = make_direction_combo();
     delay_layout->addWidget(delay_slider_);
     delay_layout->addWidget(delay_spinbox_);
     delay_layout->addWidget(delay_direction_combo_);
     effects_layout->addLayout(delay_layout);
 
-    // Drop rate row:
+    // Drop rate row
     auto* drop_layout = new QHBoxLayout();
-    drop_layout->addWidget(new QLabel("Drop rate:"));
+    auto* drop_label = new QLabel("Drop rate:");
+    drop_label->setFixedWidth(60);
+    drop_layout->addWidget(drop_label);
     drop_slider_ = new QSlider(Qt::Horizontal);
     drop_slider_->setRange(0, 100);
     drop_slider_->setValue(0);
-    drop_label_ = new QLabel("0%");
-    drop_label_->setFixedWidth(40);
+    drop_spinbox_ = new QSpinBox();
+    drop_spinbox_->setRange(0, 100);
+    drop_spinbox_->setSuffix(" %");
+    drop_spinbox_->setFixedWidth(60);
     drop_direction_combo_ = make_direction_combo();
     drop_layout->addWidget(drop_slider_);
-    drop_layout->addWidget(drop_label_);
+    drop_layout->addWidget(drop_spinbox_);
     drop_layout->addWidget(drop_direction_combo_);
     effects_layout->addLayout(drop_layout);
 
@@ -244,13 +252,14 @@ void MainWindow::SetupUi()
         effects_.delay_ms.store(value);
     });
 
+    connect(drop_slider_, &QSlider::valueChanged, drop_spinbox_, &QSpinBox::setValue);
+    connect(drop_spinbox_, qOverload<int>(&QSpinBox::valueChanged), drop_slider_, &QSlider::setValue);
     connect(drop_slider_,
             &QSlider::valueChanged,
             this,
             [this](int value)
     {
         effects_.drop_rate.store(static_cast<float>(value) / 100.0F);
-        drop_label_->setText(QString::number(value) + "%");
     });
 
     connect(delay_direction_combo_,

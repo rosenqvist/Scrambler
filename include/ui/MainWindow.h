@@ -64,7 +64,7 @@ private:  // NOLINT(readability-redundant-access-specifiers)
     QSpinBox* delay_spinbox_ = nullptr;
     QComboBox* delay_direction_combo_ = nullptr;
     QSlider* drop_slider_ = nullptr;
-    QLabel* drop_label_ = nullptr;
+    QSpinBox* drop_spinbox_ = nullptr;
     QComboBox* drop_direction_combo_ = nullptr;
 
     // Hotkey controls:
