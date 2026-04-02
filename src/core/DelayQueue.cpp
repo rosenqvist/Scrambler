@@ -46,21 +46,23 @@ void DelayQueue::Push(std::span<const uint8_t> packet_data,
     }
 
     auto release_time = std::chrono::steady_clock::now() + delay;
-    bool needs_wakeup = false;  // Flag to track if we need to ping the OS
+    bool needs_wakeup = false;
 
     {
         std::scoped_lock lock(mutex_);
         bool was_empty = queue_.empty();
-        queue_.emplace_back(packet_data, addr, release_time);
 
-        // Only wake the thread if it had nothing to do
-        if (was_empty)
+        // Use emplace for priority_queue
+        queue_.emplace(packet_data, addr, release_time);
+
+        // Wake the thread if the queue was empty OR if the new packet
+        // expires sooner than the previous top packet (which might be currently waited on).
+        if (was_empty || release_time < queue_.top().release_at)
         {
             needs_wakeup = true;
         }
     }
 
-    // Ping the kernel OUTSIDE the lock and only when necessary
     if (needs_wakeup)
     {
         cv_.notify_one();
@@ -81,27 +83,30 @@ void DelayQueue::SignalShutdown()
 void DelayQueue::FlushPackets()
 {
     std::lock_guard lock(mutex_);
-    for (const auto& pkt : queue_)
+
+    // pop elements one by one
+    while (!queue_.empty())
     {
-        Reinject(pkt);
+        Reinject(queue_.top());
+        queue_.pop();
     }
-    queue_.clear();
 }
 
-void DelayQueue::ProcessExpiredPackets()
+// Pass the unique_lock in to safely manage state
+void DelayQueue::ProcessExpiredPackets(std::unique_lock<std::mutex>& lock)
 {
     auto now = std::chrono::steady_clock::now();
     std::vector<DelayedPacket> to_reinject;
 
-    // Gather packets while locked
-    while (!queue_.empty() && queue_.front().release_at <= now)
+    // Gather packets while locked using .top() and .pop()
+    while (!queue_.empty() && queue_.top().release_at <= now)
     {
-        to_reinject.push_back(queue_.front());
-        queue_.pop_front();
+        to_reinject.push_back(queue_.top());
+        queue_.pop();
     }
 
-    // Unlock manually before doing OS calls
-    mutex_.unlock();
+    // Safely unlock the unique_lock
+    lock.unlock();
 
     // Reinject without blocking the capture thread
     for (const auto& pkt : to_reinject)
@@ -109,8 +114,8 @@ void DelayQueue::ProcessExpiredPackets()
         Reinject(pkt);
     }
 
-    // Re-lock
-    mutex_.lock();
+    // Safely re-lock the unique_lock
+    lock.lock();
 }
 
 void DelayQueue::Reinject(const DelayedPacket& pkt)
@@ -136,11 +141,12 @@ void DelayQueue::DrainLoop()
             continue;
         }
 
+        // Wait based on the earliest expiring packet (.top())
         cv_.wait_until(lock,
-                       queue_.front().release_at,
+                       queue_.top().release_at,
                        [this]
         {
-            return !running_ || (!queue_.empty() && queue_.front().release_at <= std::chrono::steady_clock::now());
+            return !running_ || (!queue_.empty() && queue_.top().release_at <= std::chrono::steady_clock::now());
         });
 
         if (!running_)
@@ -148,7 +154,8 @@ void DelayQueue::DrainLoop()
             break;
         }
 
-        ProcessExpiredPackets();
+        // Pass the lock to the processing function
+        ProcessExpiredPackets(lock);
     }
 }
 
