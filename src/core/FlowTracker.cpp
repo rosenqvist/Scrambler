@@ -23,15 +23,31 @@ bool IsNoisePid(uint32_t pid)
 uint32_t LookupPidFromSystem(uint16_t local_port)
 {
     ULONG size = 0;
-    GetExtendedUdpTable(nullptr, &size, FALSE, AF_INET, UDP_TABLE_OWNER_PID, 0);
+    // Initial call to get the baseline size
+    DWORD ret = GetExtendedUdpTable(nullptr, &size, FALSE, AF_INET, UDP_TABLE_OWNER_PID, 0);
 
-    std::vector<uint8_t> buffer(size);
-    auto* table = reinterpret_cast<MIB_UDPTABLE_OWNER_PID*>(buffer.data());
+    std::vector<uint8_t> buffer;
 
-    if (GetExtendedUdpTable(table, &size, FALSE, AF_INET, UDP_TABLE_OWNER_PID, 0) != NO_ERROR)
+    // Loop as long as the OS says our buffer is too small
+    // Microsofts documentation for IP Helper APIs says that you must use a loop
+    // to handle this. we need to keep re-sizing the buffer and try again as long as Windows complains that the buffer
+    // is too small.
+    // reason being that between asking for the size and actually requesting the data
+    // another process (like Chrome or Discord) might open a new UDP socket. And our buffer might be too
+    // small.
+    while (ret == ERROR_INSUFFICIENT_BUFFER)
+    {
+        buffer.resize(size);  // Resize vector to the newly requested size
+        ret = GetExtendedUdpTable(buffer.data(), &size, FALSE, AF_INET, UDP_TABLE_OWNER_PID, 0);
+    }
+
+    // If it failed for a reason OTHER than buffer size we bail out.
+    if (ret != NO_ERROR)
     {
         return 0;
     }
+
+    auto* table = reinterpret_cast<MIB_UDPTABLE_OWNER_PID*>(buffer.data());
 
     for (DWORD i = 0; i < table->dwNumEntries; ++i)
     {
