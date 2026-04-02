@@ -3,7 +3,7 @@
 namespace scrambler::core
 {
 
-DelayQueue::DelayQueue(HANDLE divert_handle) : divert_handle_(divert_handle)
+DelayQueue::DelayQueue(HANDLE divert_handle) : divert_handle_(divert_handle), handoff_queue_(65536)
 {
 }
 
@@ -14,10 +14,7 @@ DelayQueue::~DelayQueue()
 
 void DelayQueue::Start()
 {
-    {
-        std::lock_guard lock(mutex_);
-        running_ = true;
-    }
+    running_.store(true, std::memory_order_release);
     thread_ = std::jthread([this]
     {
         DrainLoop();
@@ -26,7 +23,8 @@ void DelayQueue::Start()
 
 void DelayQueue::Stop()
 {
-    SignalShutdown();
+    // This instantly signals the DrainLoop to exit
+    running_.store(false, std::memory_order_release);
 
     if (thread_.joinable())
     {
@@ -46,76 +44,32 @@ void DelayQueue::Push(std::span<const uint8_t> packet_data,
     }
 
     auto release_time = std::chrono::steady_clock::now() + delay;
-    bool needs_wakeup = false;
 
+    // A lock-free push.
+    // If the queue is completely full, try_push returns false and we drop the packet.
+    // This prevents WinDivert's capture loop from ever being blocked
+    if (!handoff_queue_.try_push(DelayedPacket(packet_data, addr, release_time)))
     {
-        std::scoped_lock lock(mutex_);
-        bool was_empty = queue_.empty();
-
-        // Use emplace for priority_queue
-        queue_.emplace(packet_data, addr, release_time);
-
-        // Wake the thread if the queue was empty OR if the new packet
-        // expires sooner than the previous top packet (which might be currently waited on).
-        if (was_empty || release_time < queue_.top().release_at)
-        {
-            needs_wakeup = true;
-        }
-    }
-
-    if (needs_wakeup)
-    {
-        cv_.notify_one();
+        DEBUG_PRINT("[WARN] Handoff queue full, dropped packet to save interceptor loop!");
     }
 }
 
 // Helpers
 
-void DelayQueue::SignalShutdown()
-{
-    {
-        std::lock_guard lock(mutex_);
-        running_ = false;
-    }
-    cv_.notify_one();
-}
-
 void DelayQueue::FlushPackets()
 {
-    std::lock_guard lock(mutex_);
-
-    // pop elements one by one
-    while (!queue_.empty())
+    // Thread is joined by now, so it is safe to iterate and drain
+    while (handoff_queue_.front())
     {
-        Reinject(queue_.top());
-        queue_.pop();
-    }
-}
-
-// Pass the unique_lock in to safely manage state
-void DelayQueue::ProcessExpiredPackets(std::unique_lock<std::mutex>& lock)
-{
-    auto now = std::chrono::steady_clock::now();
-    std::vector<DelayedPacket> to_reinject;
-
-    // Gather packets while locked using .top() and .pop()
-    while (!queue_.empty() && queue_.top().release_at <= now)
-    {
-        to_reinject.push_back(queue_.top());
-        queue_.pop();
+        Reinject(*handoff_queue_.front());
+        handoff_queue_.pop();
     }
 
-    // Safely unlock the unique_lock
-    lock.unlock();
-
-    // Reinject without blocking the capture thread
-    for (const auto& pkt : to_reinject)
+    while (!priority_queue_.empty())
     {
-        Reinject(pkt);
+        Reinject(priority_queue_.top());
+        priority_queue_.pop();
     }
-
-    // Safely re-lock the unique_lock
-    lock.lock();
 }
 
 void DelayQueue::Reinject(const DelayedPacket& pkt)
@@ -128,34 +82,28 @@ void DelayQueue::Reinject(const DelayedPacket& pkt)
 
 void DelayQueue::DrainLoop()
 {
-    std::unique_lock lock(mutex_);
-    while (running_)
+    while (running_.load(std::memory_order_acquire))
     {
-        if (queue_.empty())
+        // Drain all incoming packets from the SPSC handoff queue
+        // front() returns a pointer if data exists, nullptr if empty
+        while (handoff_queue_.front())
         {
-            cv_.wait(lock,
-                     [this]
-            {
-                return !queue_.empty() || !running_;
-            });
-            continue;
+            priority_queue_.push(*handoff_queue_.front());
+            handoff_queue_.pop();  // Pop from SPSC after reading
         }
 
-        // Wait based on the earliest expiring packet (.top())
-        cv_.wait_until(lock,
-                       queue_.top().release_at,
-                       [this]
+        // 2. Check if the top packet in the priority queue is ready to reinject
+        auto now = std::chrono::steady_clock::now();
+        while (!priority_queue_.empty() && priority_queue_.top().release_at <= now)
         {
-            return !running_ || (!queue_.empty() && queue_.top().release_at <= std::chrono::steady_clock::now());
-        });
-
-        if (!running_)
-        {
-            break;
+            Reinject(priority_queue_.top());
+            priority_queue_.pop();
         }
 
-        // Pass the lock to the processing function
-        ProcessExpiredPackets(lock);
+        // CPU Yielding
+        // we use yield(). This tells the OS to run other threads if they need it
+        // but instantly gives control back to this loop to check for new packets.
+        std::this_thread::yield();
     }
 }
 
