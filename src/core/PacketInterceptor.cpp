@@ -2,6 +2,7 @@
 
 #include <array>
 #include <print>
+#include <span>
 
 namespace scrambler::core
 {
@@ -139,7 +140,7 @@ void PacketInterceptor::CaptureLoop()
                          tuple.dst_port,
                          len,
                          delay.count());
-            delay_queue_->Push(packet.data(), len, addr, delay);
+            delay_queue_->Push(std::span(packet).subspan(0, len), addr, delay);
             continue;
         }
 

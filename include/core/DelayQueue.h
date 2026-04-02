@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include <deque>
 #include <mutex>
+#include <span>
 #include <thread>
 
 namespace scrambler::core
@@ -15,9 +16,17 @@ namespace scrambler::core
 struct DelayedPacket
 {
     std::array<uint8_t, kMaxPacketSize> data{};
-    UINT length{};
-    WINDIVERT_ADDRESS addr{};
+    UINT length;
+    WINDIVERT_ADDRESS addr;
     std::chrono::steady_clock::time_point release_at;
+
+    DelayedPacket(std::span<const uint8_t> packet_data,
+                  const WINDIVERT_ADDRESS& a,
+                  std::chrono::steady_clock::time_point rel)
+        : length(static_cast<UINT>(packet_data.size())), addr(a), release_at(rel)
+    {
+        std::ranges::copy(packet_data, data.begin());
+    }
 };
 
 class DelayQueue
@@ -33,11 +42,14 @@ public:
 
     void Start();
     void Stop();
-    void Push(const uint8_t* data, UINT len, const WINDIVERT_ADDRESS& addr, std::chrono::milliseconds delay);
+    void Push(std::span<const uint8_t> packet_data, const WINDIVERT_ADDRESS& addr, std::chrono::milliseconds delay);
 
 private:
     void DrainLoop();
     void Reinject(const DelayedPacket& pkt);
+    void SignalShutdown();
+    void FlushPackets();
+    void ProcessExpiredPackets();
 
     HANDLE divert_handle_;
     std::deque<DelayedPacket> queue_;

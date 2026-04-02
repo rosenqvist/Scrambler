@@ -1,6 +1,5 @@
 #include "core/DelayQueue.h"
 
-#include <cstring>
 #include <print>
 
 namespace scrambler::core
@@ -29,53 +28,77 @@ void DelayQueue::Start()
 
 void DelayQueue::Stop()
 {
-    {
-        std::lock_guard lock(mutex_);
-        running_ = false;
-    }
-    cv_.notify_one();
+    SignalShutdown();
 
     if (thread_.joinable())
     {
         thread_.join();
     }
 
-    // Flush anything still queued so packets aren't silently lost on shutdown
+    FlushPackets();
+}
+
+void DelayQueue::Push(std::span<const uint8_t> packet_data,
+                      const WINDIVERT_ADDRESS& addr,
+                      std::chrono::milliseconds delay)
+{
+    if (packet_data.size() > kMaxPacketSize)
+    {
+        return;
+    }
+
+    auto release_time = std::chrono::steady_clock::now() + delay;
+
+    {
+        std::scoped_lock lock(mutex_);
+        // Construct the packet directly inside deques memory
+        queue_.emplace_back(packet_data, addr, release_time);
+    }
+    cv_.notify_one();
+}
+
+// Helpers
+
+void DelayQueue::SignalShutdown()
+{
+    {
+        std::lock_guard lock(mutex_);
+        running_ = false;
+    }
+    cv_.notify_one();
+}
+
+void DelayQueue::FlushPackets()
+{
     std::lock_guard lock(mutex_);
-    for (auto& pkt : queue_)
+    for (const auto& pkt : queue_)
     {
         Reinject(pkt);
     }
     queue_.clear();
 }
 
-void DelayQueue::Push(const uint8_t* data, UINT len, const WINDIVERT_ADDRESS& addr, std::chrono::milliseconds delay)
+void DelayQueue::ProcessExpiredPackets()
 {
-    DelayedPacket pkt{};
-    std::memcpy(pkt.data.data(), data, len);
-    pkt.length = len;
-    pkt.addr = addr;
-    pkt.release_at = std::chrono::steady_clock::now() + delay;
-
+    auto now = std::chrono::steady_clock::now();
+    while (!queue_.empty() && queue_.front().release_at <= now)
     {
-        std::lock_guard lock(mutex_);
-        queue_.push_back(pkt);
+        Reinject(queue_.front());
+        queue_.pop_front();
     }
-    cv_.notify_one();
 }
 
 void DelayQueue::Reinject(const DelayedPacket& pkt)
 {
     if (WinDivertSend(divert_handle_, pkt.data.data(), pkt.length, nullptr, &pkt.addr) == 0)
     {
-        std::println("[WARN] DelayQueue reinject failed: {}", GetLastError());
+        std::println("[WARN] Reinject failed: {}", GetLastError());
     }
 }
 
 void DelayQueue::DrainLoop()
 {
     std::unique_lock lock(mutex_);
-
     while (running_)
     {
         if (queue_.empty())
@@ -88,12 +111,8 @@ void DelayQueue::DrainLoop()
             continue;
         }
 
-        // Sleep until the front packet's release time or until
-        // a new packet arrives that might need to go out sooner
-        auto next = queue_.front().release_at;
-
         cv_.wait_until(lock,
-                       next,
+                       queue_.front().release_at,
                        [this]
         {
             return !running_ || (!queue_.empty() && queue_.front().release_at <= std::chrono::steady_clock::now());
@@ -104,14 +123,7 @@ void DelayQueue::DrainLoop()
             break;
         }
 
-        // Reinject everything that's due in one batch to avoid
-        // waking up once per packet when many expire at the same time
-        auto now = std::chrono::steady_clock::now();
-        while (!queue_.empty() && queue_.front().release_at <= now)
-        {
-            Reinject(queue_.front());
-            queue_.pop_front();
-        }
+        ProcessExpiredPackets();
     }
 }
 
