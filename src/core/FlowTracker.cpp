@@ -3,7 +3,6 @@
 #include "core/Types.h"
 
 #include <iphlpapi.h>  // for access to GetExtendedUdpTable function
-#include <print>
 #include <vector>
 
 namespace scrambler::core
@@ -77,7 +76,7 @@ bool FlowTracker::Start()
 
     if (handle_ == INVALID_HANDLE_VALUE)
     {
-        std::println("[FLOW] WinDivertOpen failed: {}", GetLastError());
+        DEBUG_PRINT("[FLOW] WinDivertOpen failed: {}", GetLastError());
         return false;
     }
 
@@ -86,7 +85,7 @@ bool FlowTracker::Start()
     {
         TrackingLoop();
     });
-    std::println("[FLOW] Tracking UDP flows...");
+    DEBUG_PRINT("[FLOW] Tracking UDP flows...");
     return true;
 }
 
@@ -162,7 +161,7 @@ void FlowTracker::OnFlowEstablished(const FiveTuple& tuple, uint32_t pid)
     InsertFlow(tuple, pid);
 
     auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
-    std::println(
+    DEBUG_PRINT(
         "[FLOW+] PID {:>5} | {}:{} -> {}:{}", pid, addrs.src.data(), tuple.src_port, addrs.dst.data(), tuple.dst_port);
 }
 
@@ -183,12 +182,12 @@ void FlowTracker::OnFlowDeleted(const FiveTuple& tuple)
     if (!IsNoisePid(pid))
     {
         auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
-        std::println("[FLOW-] PID {:>5} | {}:{} -> {}:{}",
-                     pid,
-                     addrs.src.data(),
-                     tuple.src_port,
-                     addrs.dst.data(),
-                     tuple.dst_port);
+        DEBUG_PRINT("[FLOW-] PID {:>5} | {}:{} -> {}:{}",
+                    pid,
+                    addrs.src.data(),
+                    tuple.src_port,
+                    addrs.dst.data(),
+                    tuple.dst_port);
     }
 }
 

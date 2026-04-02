@@ -1,7 +1,6 @@
 #include "core/PacketInterceptor.h"
 
 #include <array>
-#include <print>
 #include <span>
 
 namespace scrambler::core
@@ -25,7 +24,7 @@ bool PacketInterceptor::Start()
 
     if (handle_ == INVALID_HANDLE_VALUE)
     {
-        std::println("[NET] WinDivertOpen failed: {}", GetLastError());
+        DEBUG_PRINT("[NET] WinDivertOpen failed: {}", GetLastError());
         return false;
     }
 
@@ -37,7 +36,7 @@ bool PacketInterceptor::Start()
     {
         CaptureLoop();
     });
-    std::println("[NET] Capturing UDP packets...");
+    DEBUG_PRINT("[NET] Capturing UDP packets...");
     return true;
 }
 
@@ -73,7 +72,7 @@ void PacketInterceptor::Reinject(const uint8_t* data, UINT len, const WINDIVERT_
 {
     if (WinDivertSend(handle_, data, len, nullptr, &addr) == 0)
     {
-        std::println("[WARN] Reinject failed: {}", GetLastError());
+        DEBUG_PRINT("[WARN] Reinject failed: {}", GetLastError());
     }
 }
 
@@ -118,13 +117,13 @@ void PacketInterceptor::CaptureLoop()
         if (effects_.MatchesDropDirection(is_outbound) && ShouldDrop(effects_.drop_rate.load()))
         {
             auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
-            std::println("[DROP]  PID {:>5} | {}:{} -> {}:{} ({} bytes)",
-                         pid,
-                         addrs.src.data(),
-                         tuple.src_port,
-                         addrs.dst.data(),
-                         tuple.dst_port,
-                         len);
+            DEBUG_PRINT("[DROP]  PID {:>5} | {}:{} -> {}:{} ({} bytes)",
+                        pid,
+                        addrs.src.data(),
+                        tuple.src_port,
+                        addrs.dst.data(),
+                        tuple.dst_port,
+                        len);
             continue;
         }
 
@@ -132,14 +131,14 @@ void PacketInterceptor::CaptureLoop()
         if (delay.count() > 0 && effects_.MatchesDelayDirection(is_outbound))
         {
             auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
-            std::println("[DELAY] PID {:>5} | {}:{} -> {}:{} ({} bytes) +{}ms",
-                         pid,
-                         addrs.src.data(),
-                         tuple.src_port,
-                         addrs.dst.data(),
-                         tuple.dst_port,
-                         len,
-                         delay.count());
+            DEBUG_PRINT("[DELAY] PID {:>5} | {}:{} -> {}:{} ({} bytes) +{}ms",
+                        pid,
+                        addrs.src.data(),
+                        tuple.src_port,
+                        addrs.dst.data(),
+                        tuple.dst_port,
+                        len,
+                        delay.count());
             delay_queue_->Push(std::span(packet).subspan(0, len), addr, delay);
             continue;
         }

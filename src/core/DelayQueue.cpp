@@ -1,7 +1,5 @@
 #include "core/DelayQueue.h"
 
-#include <print>
-
 namespace scrambler::core
 {
 
@@ -42,19 +40,31 @@ void DelayQueue::Push(std::span<const uint8_t> packet_data,
                       const WINDIVERT_ADDRESS& addr,
                       std::chrono::milliseconds delay)
 {
-    if (packet_data.size() > kMaxPacketSize)
+    if (packet_data.size() > kStandardMtuSize)
     {
         return;
     }
 
     auto release_time = std::chrono::steady_clock::now() + delay;
+    bool needs_wakeup = false;  // Flag to track if we need to ping the OS
 
     {
         std::scoped_lock lock(mutex_);
-        // Construct the packet directly inside deques memory
+        bool was_empty = queue_.empty();
         queue_.emplace_back(packet_data, addr, release_time);
+
+        // Only wake the thread if it had nothing to do
+        if (was_empty)
+        {
+            needs_wakeup = true;
+        }
     }
-    cv_.notify_one();
+
+    // Ping the kernel OUTSIDE the lock and only when necessary
+    if (needs_wakeup)
+    {
+        cv_.notify_one();
+    }
 }
 
 // Helpers
@@ -86,7 +96,7 @@ void DelayQueue::ProcessExpiredPackets()
     // Gather packets while locked
     while (!queue_.empty() && queue_.front().release_at <= now)
     {
-        to_reinject.push_back(std::move(queue_.front()));
+        to_reinject.push_back(queue_.front());
         queue_.pop_front();
     }
 
@@ -107,7 +117,7 @@ void DelayQueue::Reinject(const DelayedPacket& pkt)
 {
     if (WinDivertSend(divert_handle_, pkt.data.data(), pkt.length, nullptr, &pkt.addr) == 0)
     {
-        std::println("[WARN] Reinject failed: {}", GetLastError());
+        DEBUG_PRINT("[WARN] Reinject failed: {}", GetLastError());
     }
 }
 

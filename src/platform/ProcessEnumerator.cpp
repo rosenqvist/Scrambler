@@ -4,12 +4,41 @@
 
 #include <array>
 #include <tlhelp32.h>
+#include <unordered_set>
 
 namespace scrambler::platform
 {
 
 namespace
 {
+
+// Callback for EnumWindows
+BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lparam)
+{
+    // We only care about windows that are actually visible to the user
+    if (IsWindowVisible(hwnd) != 0)
+    {
+        // Get the PID that owns this window
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+
+        if (pid != 0)
+        {
+            // The Win32 API forces us to pass context via an integer (LPARAM).
+            // NOLINTNEXTLINE(performance-no-int-to-ptr)
+            auto* visible_pids = reinterpret_cast<std::unordered_set<uint32_t>*>(lparam);
+            visible_pids->insert(pid);
+        }
+    }
+    return TRUE;
+}
+
+std::unordered_set<uint32_t> GetPidsWithVisibleWindows()
+{
+    std::unordered_set<uint32_t> visible_pids;
+    EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&visible_pids));
+    return visible_pids;
+}
 
 const std::wstring& GetWindowsDir()
 {
@@ -63,6 +92,9 @@ std::vector<ProcessInfo> EnumerateProcesses()
 
     const uint32_t self_pid = GetCurrentProcessId();
 
+    // Pre calculate which processes have visible windows
+    const auto visible_pids = GetPidsWithVisibleWindows();
+
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot == INVALID_HANDLE_VALUE)
     {
@@ -86,6 +118,16 @@ std::vector<ProcessInfo> EnumerateProcesses()
         // Skip idle + system + self
         if (pid != 0 && pid != 4 && pid != self_pid)
         {
+            // Skip processes that do not have a visible window
+            if (!visible_pids.contains(pid))
+            {
+                if (Process32NextW(snapshot, &entry) == 0)
+                {
+                    break;
+                }
+                continue;
+            }
+
             const auto* exe = static_cast<const wchar_t*>(entry.szExeFile);
 
             int len = WideCharToMultiByte(CP_UTF8, 0, exe, -1, nullptr, 0, nullptr, nullptr);

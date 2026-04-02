@@ -2,6 +2,8 @@
 
 #include "core/Types.h"
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <condition_variable>
 #include <deque>
@@ -14,7 +16,7 @@ namespace scrambler::core
 
 struct DelayedPacket
 {
-    std::vector<uint8_t> data;
+    std::array<uint8_t, kStandardMtuSize> data{};
     UINT length;
     WINDIVERT_ADDRESS addr;
     std::chrono::steady_clock::time_point release_at;
@@ -22,11 +24,11 @@ struct DelayedPacket
     DelayedPacket(std::span<const uint8_t> packet_data,
                   const WINDIVERT_ADDRESS& a,
                   std::chrono::steady_clock::time_point rel)
-        : data(packet_data.begin(), packet_data.end()),
-          length(static_cast<UINT>(packet_data.size())),
-          addr(a),
-          release_at(rel)
+        : length(static_cast<UINT>(packet_data.size())), addr(a), release_at(rel)
     {
+        // Copy up to 1500 bytes (mtu size) into the fixed array
+        size_t copy_size = (std::min) (packet_data.size(), kStandardMtuSize);
+        std::copy_n(packet_data.begin(), copy_size, data.begin());
     }
 };
 
@@ -54,6 +56,7 @@ private:
 
     HANDLE divert_handle_;
     std::deque<DelayedPacket> queue_;
+
     mutable std::mutex mutex_;
     std::condition_variable cv_;
     std::jthread thread_;

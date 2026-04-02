@@ -4,7 +4,18 @@
 
 #include <array>
 #include <cstdint>
+#include <print>
 #include <winsock.h>
+
+// debug macro
+#ifndef NDEBUG
+    #define DEBUG_PRINT(...) std::println(__VA_ARGS__)
+#else
+    #define DEBUG_PRINT(...) \
+        do                   \
+        {                    \
+        } while (0)
+#endif
 
 namespace scrambler::core
 {
@@ -20,6 +31,7 @@ constexpr std::size_t kGoldenRatio = 0x9e3779b9;
 // the pid of the windows System process: "System".
 // We try to exclude network activity from this process since its mostly noise.
 [[maybe_unused]] constexpr uint32_t kSystemPid = 4;
+[[maybe_unused]] constexpr size_t kStandardMtuSize = 1500;
 
 struct FiveTuple
 {

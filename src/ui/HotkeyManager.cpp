@@ -358,8 +358,8 @@ LRESULT CALLBACK HotkeyManager::KeyboardHookProc(int n_code, WPARAM w_param, LPA
 {
     if (n_code >= 0 && (w_param == WM_KEYDOWN || w_param == WM_SYSKEYDOWN) && instance)
     {
-        auto hook_struct = reinterpret_cast<KBDLLHOOKSTRUCT&>(l_param);
-        UINT vk = hook_struct.vkCode;
+        auto* hook_struct = reinterpret_cast<KBDLLHOOKSTRUCT*>(l_param);  // NOLINT(performance-no-int-to-ptr)
+        UINT vk = hook_struct->vkCode;
 
         // Ignore pure modifier presses
         if (vk != VK_CONTROL && vk != VK_SHIFT && vk != VK_MENU && vk != VK_LCONTROL && vk != VK_RCONTROL
@@ -391,8 +391,8 @@ LRESULT CALLBACK HotkeyManager::MouseHookProc(int n_code, WPARAM w_param, LPARAM
         }
         else if (w_param == WM_XBUTTONDOWN)
         {
-            auto hook_struct = reinterpret_cast<MSLLHOOKSTRUCT&>(l_param);
-            vk = (HIWORD(hook_struct.mouseData) == XBUTTON1) ? VK_XBUTTON1 : VK_XBUTTON2;
+            auto* hook_struct = reinterpret_cast<MSLLHOOKSTRUCT*>(l_param);  // NOLINT(performance-no-int-to-ptr)
+            vk = (HIWORD(hook_struct->mouseData) == XBUTTON1) ? VK_XBUTTON1 : VK_XBUTTON2;
         }
 
         if (vk != 0)
@@ -400,7 +400,6 @@ LRESULT CALLBACK HotkeyManager::MouseHookProc(int n_code, WPARAM w_param, LPARAM
             instance->CheckAndTrigger(vk, GetCurrentModifiers());
         }
     }
-    // ALWAYS call next hook to ensure the game receives the mouse clicks
     return CallNextHookEx(mouse_hook, n_code, w_param, l_param);
 }
 
