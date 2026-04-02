@@ -2,7 +2,6 @@
 
 #include "core/Types.h"
 
-#include <array>
 #include <chrono>
 #include <condition_variable>
 #include <deque>
@@ -10,12 +9,13 @@
 #include <span>
 #include <thread>
 
+
 namespace scrambler::core
 {
 
 struct DelayedPacket
 {
-    std::array<uint8_t, kMaxPacketSize> data{};
+    std::vector<uint8_t> data;
     UINT length;
     WINDIVERT_ADDRESS addr;
     std::chrono::steady_clock::time_point release_at;
@@ -23,9 +23,11 @@ struct DelayedPacket
     DelayedPacket(std::span<const uint8_t> packet_data,
                   const WINDIVERT_ADDRESS& a,
                   std::chrono::steady_clock::time_point rel)
-        : length(static_cast<UINT>(packet_data.size())), addr(a), release_at(rel)
+        : data(packet_data.begin(), packet_data.end()),
+          length(static_cast<UINT>(packet_data.size())),
+          addr(a),
+          release_at(rel)
     {
-        std::ranges::copy(packet_data, data.begin());
     }
 };
 
