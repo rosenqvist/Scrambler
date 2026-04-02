@@ -41,15 +41,7 @@ bool StartsWithInsensitive(const std::wstring& str, const std::wstring& prefix)
     {
         return false;
     }
-
-    for (size_t i = 0; i < prefix.size(); ++i)
-    {
-        if (towlower(str[i]) != towlower(prefix[i]))
-        {
-            return false;
-        }
-    }
-    return true;
+    return _wcsnicmp(str.c_str(), prefix.c_str(), prefix.size()) == 0;
 }
 
 bool IsSystemProcessPath(const std::wstring& path)
