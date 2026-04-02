@@ -27,7 +27,7 @@ struct DelayedPacket
         : length(static_cast<UINT>(packet_data.size())), addr(a), release_at(rel)
     {
         // Copy up to 1500 bytes (mtu size) into the fixed array
-        size_t copy_size = (std::min) (packet_data.size(), kStandardMtuSize);
+        size_t copy_size = std::min<size_t>(packet_data.size(), kStandardMtuSize);
         std::copy_n(packet_data.begin(), copy_size, data.begin());
     }
 };
