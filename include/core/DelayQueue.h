@@ -9,7 +9,6 @@
 #include <span>
 #include <thread>
 
-
 namespace scrambler::core
 {
 

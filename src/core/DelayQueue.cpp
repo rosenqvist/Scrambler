@@ -81,11 +81,26 @@ void DelayQueue::FlushPackets()
 void DelayQueue::ProcessExpiredPackets()
 {
     auto now = std::chrono::steady_clock::now();
+    std::vector<DelayedPacket> to_reinject;
+
+    // Gather packets while locked
     while (!queue_.empty() && queue_.front().release_at <= now)
     {
-        Reinject(queue_.front());
+        to_reinject.push_back(std::move(queue_.front()));
         queue_.pop_front();
     }
+
+    // Unlock manually before doing OS calls
+    mutex_.unlock();
+
+    // Reinject without blocking the capture thread
+    for (const auto& pkt : to_reinject)
+    {
+        Reinject(pkt);
+    }
+
+    // Re-lock
+    mutex_.lock();
 }
 
 void DelayQueue::Reinject(const DelayedPacket& pkt)
