@@ -44,11 +44,6 @@ void PacketInterceptor::Stop()
 {
     running_.store(false);
 
-    if (delay_queue_)
-    {
-        delay_queue_->Stop();
-    }
-
     if (handle_ != INVALID_HANDLE_VALUE)
     {
         WinDivertClose(handle_);
@@ -60,7 +55,11 @@ void PacketInterceptor::Stop()
         thread_.join();
     }
 
-    delay_queue_.reset();
+    if (delay_queue_)
+    {
+        delay_queue_->Stop();
+        delay_queue_.reset();
+    }
 }
 
 bool PacketInterceptor::IsRunning() const
