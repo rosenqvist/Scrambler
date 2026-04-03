@@ -5,7 +5,6 @@
 
 #include <queue>
 
-#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -21,24 +20,20 @@ namespace scrambler::core
 struct DelayedPacket
 {
     std::array<uint8_t, kStandardMtuSize> data{};
-    UINT length;
-    WINDIVERT_ADDRESS addr;
+    UINT length = 0;
+    WINDIVERT_ADDRESS addr{};
     std::chrono::steady_clock::time_point release_at;
 
-    DelayedPacket(std::span<const uint8_t> packet_data,
-                  const WINDIVERT_ADDRESS& a,
-                  std::chrono::steady_clock::time_point rel)
-        : length(static_cast<UINT>(packet_data.size())), addr(a), release_at(rel)
-    {
-        size_t copy_size = std::min<size_t>(packet_data.size(), kStandardMtuSize);
-        std::copy_n(packet_data.begin(), copy_size, data.begin());
-    }
+    DelayedPacket() = default;
+};
 
-    // We need this operator so our priority queue knows how to sort the packets.
-    // It tells the queue to automatically bubble the packet with the earliest release time to the top.
-    bool operator>(const DelayedPacket& other) const
+// We need this struct so our priority queue knows how to sort the packet pointers.
+// It tells the queue to automatically bubble the packet with the earliest release time to the top.
+struct CompareDelayedPacketPtr
+{
+    bool operator()(const DelayedPacket* a, const DelayedPacket* b) const
     {
-        return release_at > other.release_at;
+        return a->release_at > b->release_at;
     }
 };
 
@@ -67,20 +62,24 @@ public:
 private:
     // This is the background loop that constantly checks if any packets are ready to be sent.
     void DrainLoop();
-    void Reinject(const DelayedPacket& pkt);
+    void Reinject(const DelayedPacket* pkt);
 
     // This cleans up and releases any leftover packets when the application closes down.
     void FlushPackets();
 
     HANDLE divert_handle_;
 
+    std::vector<DelayedPacket> memory_pool_;
+
+    rigtorp::SPSCQueue<DelayedPacket*> free_queue_;
+
     // This is rigtorps ultra fast lock-free queue, used alot in HFT. It's pretty overkill, but hey why not.
     // It acts as a fast bridge between the thread capturing packets and the background drain thread.
     // Because it is lock-free it stops the main capture loop from ever getting stuck.
-    rigtorp::SPSCQueue<DelayedPacket> handoff_queue_;
+    rigtorp::SPSCQueue<DelayedPacket*> handoff_queue_;
 
     // This is where packets wait until their delay timer runs out.
-    std::priority_queue<DelayedPacket, std::vector<DelayedPacket>, std::greater<DelayedPacket>> priority_queue_;
+    std::priority_queue<DelayedPacket*, std::vector<DelayedPacket*>, CompareDelayedPacketPtr> priority_queue_;
 
     std::jthread thread_;
 

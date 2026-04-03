@@ -162,7 +162,7 @@ void PacketInterceptor::CaptureLoop()
                     // Apply Drop Effect
                     if (effects_.MatchesDropDirection(is_outbound) && ShouldDrop(effects_.drop_rate.load()))
                     {
-                        auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
+                        [[maybe_unused]] auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
                         DEBUG_PRINT("[DROP]  PID {:>5} | {}:{} -> {}:{} ({} bytes)",
                                     pid,
                                     addrs.src.data(),
@@ -178,7 +178,7 @@ void PacketInterceptor::CaptureLoop()
                         auto delay = effects_.Delay();
                         if (delay.count() > 0 && effects_.MatchesDelayDirection(is_outbound))
                         {
-                            auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
+                            [[maybe_unused]] auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
                             DEBUG_PRINT("[DELAY] PID {:>5} | {}:{} -> {}:{} ({} bytes) +{}ms",
                                         pid,
                                         addrs.src.data(),

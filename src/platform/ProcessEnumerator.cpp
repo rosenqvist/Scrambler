@@ -115,19 +115,9 @@ std::vector<ProcessInfo> EnumerateProcesses()
         auto pid = static_cast<uint32_t>(entry.th32ProcessID);
         auto parent_pid = static_cast<uint32_t>(entry.th32ParentProcessID);
 
-        // Skip idle + system + self
+        //* Skip idle + system + self
         if (pid != 0 && pid != 4 && pid != self_pid)
         {
-            // Skip processes that do not have a visible window
-            if (!visible_pids.contains(pid))
-            {
-                if (Process32NextW(snapshot, &entry) == 0)
-                {
-                    break;
-                }
-                continue;
-            }
-
             const auto* exe = static_cast<const wchar_t*>(entry.szExeFile);
 
             int len = WideCharToMultiByte(CP_UTF8, 0, exe, -1, nullptr, 0, nullptr, nullptr);

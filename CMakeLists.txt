@@ -91,7 +91,10 @@ if (WIN32)
     )
 endif()
 
-target_include_directories(scrambler PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(scrambler PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/third_party
+)
 
 target_link_libraries(scrambler PRIVATE
     Qt6::Widgets
@@ -152,6 +155,7 @@ if (SCRAMBLER_ENABLE_TESTS)
 
     target_include_directories(scrambler_tests PRIVATE
         ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/third_party
     )
 
     target_link_libraries(scrambler_tests PRIVATE
