@@ -4,16 +4,13 @@
 
 #include <array>
 #include <cstdint>
-#include <print>
 
 // debug macro
 #ifndef NDEBUG
+    #include <print>  // IWYU pragma: keep
     #define DEBUG_PRINT(...) std::println(__VA_ARGS__)
 #else
-    #define DEBUG_PRINT(...) \
-        do                   \
-        {                    \
-        } while (0)
+    #define DEBUG_PRINT(...) ((void) 0)
 #endif
 
 namespace scrambler::core
