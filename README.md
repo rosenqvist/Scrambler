@@ -30,24 +30,24 @@ Non-targeted traffic is reinjected immediately with no modification.
 - Must be run as Administrator since WinDivert requires kernel-level access to install its driver
 
 ## Installation
-Download the latest release zip from the [Releases page](https://github.com/rosenqvist/Scrambler/releases), extract anywhere and run Scrambler.exe as Administrator. No installer needed.  
+Download the latest release zip from the [Releases page](https://github.com/rosenqvist/Scrambler/releases), extract anywhere and run Scrambler.exe as Administrator. No installer needed.
 The WinDivert driver is automatically loaded on first use and unloaded on exit or reboot.
 
-> [!WARNING]  
-> **USE AT YOUR OWN RISK**  
-> This tool installs a **kernel-level network driver (WinDivert)** that intercepts and modifies network packets.  
+> [!WARNING]
+> **USE AT YOUR OWN RISK**
+> This tool installs a **kernel-level network driver (WinDivert)** that intercepts and modifies network packets.
 > Many online games use anti-cheat systems that may **detect, block, or ban users** for running software that interacts with network traffic at the kernel level.
-> > **Do not run Scrambler alongside games that use kernel-level anti-cheat systems.**  
-> - Close Scrambler before launching such games  
+> > **Do not run Scrambler alongside games that use kernel-level anti-cheat systems.**
+> - Close Scrambler before launching such games
 > - Reboot your system to ensure the **WinDivert driver is fully unloaded**
 ---
 ### Intended Use
 
 This tool is designed for **legitimate testing purposes only**, including:
 
-- Simulating poor network conditions  
-- Development and QA  
-- Debugging networked applications  
+- Simulating poor network conditions
+- Development and QA
+- Debugging networked applications
 
 ## Building from Source
 
@@ -55,9 +55,9 @@ This tool is designed for **legitimate testing purposes only**, including:
 
 Before building, ensure you have the following installed:
 
-- **[CMake](https://cmake.org/download/)**  
-- **[Ninja](https://ninja-build.org/)**  
-- **[LLVM/Clang](https://llvm.org/builds/)**  
+- **[CMake](https://cmake.org/download/)**
+- **[Ninja](https://ninja-build.org/)**
+- **[LLVM/Clang](https://llvm.org/builds/)**
 - **[vcpkg](https://github.com/microsoft/vcpkg)**
 
 ---
@@ -82,31 +82,52 @@ ctest --test-dir build/debug --show-only
 ctest --test-dir build/debug --output-on-failure
 ```
 
-## Available Presets
+### Available Presets
 
-| Preset       | Description                                      |
-|--------------|--------------------------------------------------|
-| debug        | Debug build with tests enabled                   |
-| release      | Optimized release build                          |
-| debug-asan   | Debug with AddressSanitizer + UBSan              |
-| debug-tsan   | Debug with ThreadSanitizer                       |
+| Preset                | Description                                            |
+|-----------------------|--------------------------------------------------------|
+| debug                 | Debug build with tests enabled                         |
+| release               | Optimized release build                                |
+| relwithdebinfo        | Optimized build with debug symbols (Application Verifier)|
+| relwithdebinfo-asan   | Optimized build with debug symbols and AddressSanitizer (unit tests only) |
+
+## Testing
+
+Scrambler is validated using two complementary tools on Windows:
+
+**Unit tests under AddressSanitizer.** The core logic: (`FiveTuple`, `TargetSet`, `EffectConfig`, `ProcessEnumerator` helpers) is run by 47 GoogleTest cases and an 8 thread concurrent stress test on the target PID. Build and run with:
+
+```powershell
+cmake --preset relwithdebinfo-asan
+cmake --build build/relwithdebinfo-asan
+ctest --test-dir build/relwithdebinfo-asan --output-on-failure
+```
+
+ASan is not run against `scrambler.exe` itself because the prebuilt Qt 6 binaries from vcpkg don't support it.
+
+**GUI under Application Verifier.** The full application is tested under Microsoft Application Verifier with the Basic check group enabled (Exceptions, Handles, Heaps, Leak, Locks, Memory, ThreadPool, TLS). Build the binary with:
+
+```powershell
+cmake --preset relwithdebinfo
+cmake --build build/relwithdebinfo
+```
 
 ## Third-Party Licenses
 
 This project uses the following third-party software:
 
-- **[WinDivert](https://github.com/basil00/Divert)** Dual-licensed under **LGPL v3** or **GPL v2**.  
-  WinDivert is dynamically linked and distributed unmodified.  
+- **[WinDivert](https://github.com/basil00/Divert)** Dual-licensed under **LGPL v3** or **GPL v2**.
+  WinDivert is dynamically linked and distributed unmodified.
 
-- **[Qt 6](https://www.qt.io/)** Licensed under **LGPL v3**.  
-  Qt is dynamically linked and distributed unmodified.  
+- **[Qt 6](https://www.qt.io/)** Licensed under **LGPL v3**.
+  Qt is dynamically linked and distributed unmodified.
 
-- **[Google Test](https://github.com/google/googletest)** Licensed under **BSD 3-Clause**.  
+- **[Google Test](https://github.com/google/googletest)** Licensed under **BSD 3-Clause**.
   Used for testing only, not distributed.
 
 ##  License
 
-This project is licensed under the **[GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.html)**.  
+This project is licensed under the **[GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.html)**.
 See the `LICENSE` file for details.
 
 This license is compatible with both WinDivert (LGPL v3 / GPL v2) and Qt (LGPL v3), and ensures that any modifications to Scrambler remain open source.

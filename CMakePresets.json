@@ -28,31 +28,36 @@
             "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
         },
         {
-            "name": "debug-asan",
-            "displayName": "Debug + ASan/UBSan",
-            "inherits": "debug",
-            "cacheVariables": {
-                "SCRAMBLER_ENABLE_ASAN": "ON",
-                "SCRAMBLER_ENABLE_UBSAN": "ON"
-            }
+            "name": "relwithdebinfo",
+            "displayName": "RelWithDebInfo (for Application Verifier)",
+            "inherits": "base",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
         },
         {
-            "name": "debug-tsan",
-            "displayName": "Debug + TSan",
-            "inherits": "debug",
-            "cacheVariables": { "SCRAMBLER_ENABLE_TSAN": "ON" }
+            "name": "relwithdebinfo-asan",
+            "displayName": "RelWithDebInfo + ASan (unit tests only)",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "SCRAMBLER_ENABLE_ASAN": "ON"
+            }
         }
     ],
     "buildPresets": [
         { "name": "debug", "configurePreset": "debug" },
         { "name": "release", "configurePreset": "release" },
-        { "name": "debug-asan", "configurePreset": "debug-asan" },
-        { "name": "debug-tsan", "configurePreset": "debug-tsan" }
+        { "name": "relwithdebinfo", "configurePreset": "relwithdebinfo" },
+        { "name": "relwithdebinfo-asan", "configurePreset": "relwithdebinfo-asan" }
     ],
     "testPresets": [
         {
             "name": "debug",
             "configurePreset": "debug",
+            "output": { "outputOnFailure": true }
+        },
+        {
+            "name": "relwithdebinfo-asan",
+            "configurePreset": "relwithdebinfo-asan",
             "output": { "outputOnFailure": true }
         }
     ]
