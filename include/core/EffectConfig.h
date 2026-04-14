@@ -6,7 +6,6 @@
 #include <mutex>
 #include <random>
 #include <unordered_set>
-#include <winsock.h>
 
 namespace scrambler::core
 {

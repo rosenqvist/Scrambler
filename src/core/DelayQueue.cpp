@@ -55,7 +55,7 @@ void DelayQueue::Push(std::span<const uint8_t> packet_data,
     // This prevents WinDivert's capture loop from ever being blocked
     if (!free_pkt_ptr)
     {
-        DEBUG_PRINT("[WARN] Free queue full, dropped packet to save interceptor loop!");
+        DEBUG_PRINT("[WARN] Free queue empty, dropped packet to save interceptor loop!");
         return;
     }
 

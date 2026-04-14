@@ -5,7 +5,6 @@
 #include <array>
 #include <cstdint>
 #include <print>
-#include <winsock.h>
 
 // debug macro
 #ifndef NDEBUG
