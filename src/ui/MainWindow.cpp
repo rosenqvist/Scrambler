@@ -416,8 +416,6 @@ void MainWindow::StopPipeline()
         flow_tracker_.reset();
     }
 
-    targets_.Clear();
-
     running_ = false;
     start_stop_button_->setText("Start");
     UpdateDriverStatus("Stopped", false);
