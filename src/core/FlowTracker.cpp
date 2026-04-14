@@ -159,10 +159,11 @@ void FlowTracker::OnFlowEstablished(const FiveTuple& tuple, uint32_t pid)
     }
 
     InsertFlow(tuple, pid);
-
-    [[maybe_unused]] auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
+#ifndef NDEBUG
+    auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
     DEBUG_PRINT(
         "[FLOW+] PID {:>5} | {}:{} -> {}:{}", pid, addrs.src.data(), tuple.src_port, addrs.dst.data(), tuple.dst_port);
+#endif
 }
 
 void FlowTracker::OnFlowDeleted(const FiveTuple& tuple)
@@ -178,16 +179,17 @@ void FlowTracker::OnFlowDeleted(const FiveTuple& tuple)
     }
 
     EraseFlow(tuple);
-
     if (!IsNoisePid(pid))
     {
-        [[maybe_unused]] auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
+#ifndef NDEBUG
+        auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
         DEBUG_PRINT("[FLOW-] PID {:>5} | {}:{} -> {}:{}",
                     pid,
                     addrs.src.data(),
                     tuple.src_port,
                     addrs.dst.data(),
                     tuple.dst_port);
+#endif
     }
 }
 
