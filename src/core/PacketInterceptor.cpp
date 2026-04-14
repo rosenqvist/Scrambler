@@ -46,8 +46,7 @@ void PacketInterceptor::Stop()
 
     if (handle_ != INVALID_HANDLE_VALUE)
     {
-        WinDivertClose(handle_);
-        handle_ = INVALID_HANDLE_VALUE;
+        WinDivertShutdown(handle_, WINDIVERT_SHUTDOWN_BOTH);
     }
 
     if (thread_.joinable())
@@ -59,6 +58,12 @@ void PacketInterceptor::Stop()
     {
         delay_queue_->Stop();
         delay_queue_.reset();
+    }
+
+    if (handle_ != INVALID_HANDLE_VALUE)
+    {
+        WinDivertClose(handle_);
+        handle_ = INVALID_HANDLE_VALUE;
     }
 }
 
