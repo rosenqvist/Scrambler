@@ -95,7 +95,7 @@ ctest --test-dir build/debug --output-on-failure
 
 Scrambler is validated using two complementary tools on Windows:
 
-**Unit tests under AddressSanitizer.** The core logic: (`FiveTuple`, `TargetSet`, `EffectConfig`, `ProcessEnumerator` helpers) is run by 47 GoogleTest cases and an 8 thread concurrent stress test on the target PID. Build and run with:
+**Unit tests under AddressSanitizer.** The core logic: (`FiveTuple`, `TargetSet`, `EffectConfig`, `ProcessEnumerator` helpers) is run by GoogleTest cases and an 8 thread concurrent stress test on the target PID. Build and run with:
 
 ```powershell
 cmake --preset relwithdebinfo-asan
@@ -105,7 +105,7 @@ ctest --test-dir build/relwithdebinfo-asan --output-on-failure
 
 ASan is not run against `scrambler.exe` itself because the prebuilt Qt 6 binaries from vcpkg don't support it.
 
-**GUI under Application Verifier.** The full application is tested under Microsoft Application Verifier with the Basic check group enabled (Exceptions, Handles, Heaps, Leak, Locks, Memory, ThreadPool, TLS). Build the binary with:
+The full application is tested under Microsoft Application Verifier with the Basic check group enabled (Exceptions, Handles, Heaps, Leak, Locks, Memory, ThreadPool, TLS). Build the binary with:
 
 ```powershell
 cmake --preset relwithdebinfo
