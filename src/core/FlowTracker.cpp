@@ -95,13 +95,18 @@ void FlowTracker::Stop()
 
     if (handle_ != INVALID_HANDLE_VALUE)
     {
-        WinDivertClose(handle_);
-        handle_ = INVALID_HANDLE_VALUE;
+        WinDivertShutdown(handle_, WINDIVERT_SHUTDOWN_BOTH);
     }
 
     if (thread_.joinable())
     {
         thread_.join();
+    }
+
+    if (handle_ != INVALID_HANDLE_VALUE)
+    {
+        WinDivertClose(handle_);
+        handle_ = INVALID_HANDLE_VALUE;
     }
 }
 
@@ -128,10 +133,7 @@ uint32_t FlowTracker::LookupPid(const FiveTuple& tuple)
         pid = LookupPidFromSystem(tuple.dst_port);
     }
 
-    if (pid != 0)
-    {
-        InsertFlow(tuple, pid);
-    }
+    InsertFlow(tuple, pid);
 
     return pid;
 }
