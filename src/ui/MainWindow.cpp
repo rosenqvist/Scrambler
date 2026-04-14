@@ -454,8 +454,7 @@ void MainWindow::PlayToggleSound(bool started)
     }
 
     int volume = volume_slider_->value();
-    sound_future_ = std::async(std::launch::async,
-                               [started, volume]
+    std::thread([started, volume]
     {
         constexpr DWORD kSampleRate = 44100;
         constexpr DWORD kDurationMs = 150;
@@ -503,7 +502,7 @@ void MainWindow::PlayToggleSound(bool started)
 
         waveOutUnprepareHeader(hwo, &hdr, sizeof(hdr));
         waveOutClose(hwo);
-    });
+    }).detach();
 }
 
 void MainWindow::OnProcessSelectionChanged()

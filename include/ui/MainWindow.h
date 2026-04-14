@@ -17,7 +17,6 @@
 #include <QTimer>
 #include <QTreeWidget>
 
-#include <future>
 #include <memory>
 
 namespace scrambler::ui
@@ -49,7 +48,6 @@ private:  // NOLINT(readability-redundant-access-specifiers)
     void StopPipeline();
     void UpdateDriverStatus(const QString& message, bool is_error);
     void PlayToggleSound(bool started);
-    std::future<void> sound_future_;
 
     // UI widgets:
     QPushButton* start_stop_button_ = nullptr;
