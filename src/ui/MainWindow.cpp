@@ -29,7 +29,7 @@ MainWindow::MainWindow(QWidget* parent)
     SetupUi();
 
     connect(refresh_timer_, &QTimer::timeout, this, &MainWindow::RefreshProcessList);
-    refresh_timer_->start(3000);
+    refresh_timer_->start(5000);
 
     RefreshProcessList();
     UpdateDriverStatus("Stopped", false);
@@ -392,6 +392,7 @@ void MainWindow::StartPipeline()
     }
 
     running_ = true;
+    refresh_timer_->stop();
     start_stop_button_->setText("Stop");
     UpdateDriverStatus("Running", false);
     PlayToggleSound(true);
@@ -417,6 +418,8 @@ void MainWindow::StopPipeline()
     }
 
     running_ = false;
+    refresh_timer_->start(5000);
+    RefreshProcessList();
     start_stop_button_->setText("Start");
     UpdateDriverStatus("Stopped", false);
     PlayToggleSound(false);
@@ -573,8 +576,6 @@ void MainWindow::RefreshProcessList()
         pid_to_index[processes[static_cast<std::size_t>(i)].pid] = i;
     }
 
-    QFileIconProvider icon_provider;
-
     std::unordered_map<uint32_t, QTreeWidgetItem*> pid_to_item;
     for (const auto& proc : processes)
     {
@@ -583,11 +584,7 @@ void MainWindow::RefreshProcessList()
         item->setText(1, QString::fromStdString(proc.name));
         item->setData(0, Qt::UserRole, proc.pid);
 
-        if (!proc.exe_path.empty())
-        {
-            auto info = QFileInfo(QString::fromStdWString(proc.exe_path));
-            item->setIcon(1, icon_provider.icon(info));
-        }
+        item->setIcon(1, IconToExePath(proc.exe_path));
 
         pid_to_item[proc.pid] = item;
     }
@@ -644,6 +641,26 @@ void MainWindow::UpdateDriverStatus(const QString& message, bool is_error)
     {
         status_label_->setStyleSheet("");
     }
+}
+
+QIcon MainWindow::IconToExePath(const std::wstring& exe_path)
+{
+    if (exe_path.empty())
+    {
+        return {};
+    }
+
+    auto it = icon_cache_.find(exe_path);
+    if (it != icon_cache_.end())
+    {
+        return it->second;
+    }
+
+    QFileIconProvider icon_provider;
+    auto info = QFileInfo(QString::fromStdWString(exe_path));
+    QIcon icon = icon_provider.icon(info);
+    icon_cache_.emplace(exe_path, icon);
+    return icon;
 }
 
 }  // namespace scrambler::ui

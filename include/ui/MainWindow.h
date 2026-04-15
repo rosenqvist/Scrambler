@@ -8,6 +8,7 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMainWindow>
@@ -18,6 +19,8 @@
 #include <QTreeWidget>
 
 #include <memory>
+#include <string>
+#include <unordered_map>
 
 namespace scrambler::ui
 {
@@ -89,6 +92,11 @@ private:  // NOLINT(readability-redundant-access-specifiers)
     std::unique_ptr<core::PacketInterceptor> interceptor_;
 
     bool running_ = false;
+
+    // Icon cache by exe path
+    // we cache them to avoid disk hits as we refresh the PID list every 3 seconds.
+    std::unordered_map<std::wstring, QIcon> icon_cache_;
+    QIcon IconToExePath(const std::wstring& exe_path);
 };
 
 }  // namespace scrambler::ui
