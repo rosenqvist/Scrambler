@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Concurrent)
 qt_standard_project_setup()
 
 option(SCRAMBLER_ENABLE_TESTS "Build unit tests" ON)
@@ -106,6 +106,7 @@ target_include_directories(scrambler PRIVATE
 
 target_link_libraries(scrambler PRIVATE
     Qt6::Widgets
+    Qt6::Concurrent
     WinDivert
     winmm
     dwmapi

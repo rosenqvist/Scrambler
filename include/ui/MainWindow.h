@@ -3,11 +3,13 @@
 #include "core/EffectConfig.h"
 #include "core/FlowTracker.h"
 #include "core/PacketInterceptor.h"
+#include "platform/ProcessEnumerator.h"
 #include "ui/HotkeyEdit.h"
 #include "ui/HotkeyManager.h"
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QFutureWatcher>
 #include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
@@ -97,6 +99,10 @@ private:  // NOLINT(readability-redundant-access-specifiers)
     // we cache them to avoid disk hits as we refresh the PID list every 3 seconds.
     std::unordered_map<std::wstring, QIcon> icon_cache_;
     QIcon IconToExePath(const std::wstring& exe_path);
+
+    void OnProcessListReady();
+    QFutureWatcher<std::vector<platform::ProcessInfo>>* process_watcher_ = nullptr;
+    bool refresh_in_flight_ = false;
 };
 
 }  // namespace scrambler::ui

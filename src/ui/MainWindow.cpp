@@ -12,6 +12,7 @@
 #include <QMessageBox>
 #include <QSettings>
 #include <QStatusBar>
+#include <QtConcurrent>
 #include <QVBoxLayout>
 
 #include <windows.h>
@@ -30,6 +31,12 @@ MainWindow::MainWindow(QWidget* parent)
 
     connect(refresh_timer_, &QTimer::timeout, this, &MainWindow::RefreshProcessList);
     refresh_timer_->start(5000);
+
+    process_watcher_ = new QFutureWatcher<std::vector<platform::ProcessInfo>>(this);
+    connect(process_watcher_,
+            &QFutureWatcher<std::vector<platform::ProcessInfo>>::finished,
+            this,
+            &MainWindow::OnProcessListReady);
 
     RefreshProcessList();
     UpdateDriverStatus("Stopped", false);
@@ -547,7 +554,21 @@ void MainWindow::OnProcessFilterChanged(const QString& text)
 
 void MainWindow::RefreshProcessList()
 {
-    // Save selected PID
+    if (refresh_in_flight_)
+    {
+        return;
+    }
+
+    refresh_in_flight_ = true;
+    auto future = QtConcurrent::run(&platform::EnumerateProcesses);
+    process_watcher_->setFuture(future);
+}
+
+void MainWindow::OnProcessListReady()
+{
+    refresh_in_flight_ = false;
+    const auto processes = process_watcher_->result();
+
     uint32_t selected_pid = 0;
     auto selected = process_tree_->selectedItems();
     if (!selected.isEmpty())
@@ -555,7 +576,6 @@ void MainWindow::RefreshProcessList()
         selected_pid = selected.first()->text(0).toUInt();
     }
 
-    // Save expanded PIDs
     std::unordered_set<uint32_t> expanded_pids;
     for (int i = 0; i < process_tree_->topLevelItemCount(); ++i)
     {
@@ -568,14 +588,6 @@ void MainWindow::RefreshProcessList()
 
     process_tree_->clear();
 
-    auto processes = platform::EnumerateProcesses();
-
-    std::unordered_map<uint32_t, int> pid_to_index;
-    for (int i = 0; i < static_cast<int>(processes.size()); ++i)
-    {
-        pid_to_index[processes[static_cast<std::size_t>(i)].pid] = i;
-    }
-
     std::unordered_map<uint32_t, QTreeWidgetItem*> pid_to_item;
     for (const auto& proc : processes)
     {
@@ -583,9 +595,7 @@ void MainWindow::RefreshProcessList()
         item->setText(0, QString::number(proc.pid));
         item->setText(1, QString::fromStdString(proc.name));
         item->setData(0, Qt::UserRole, proc.pid);
-
         item->setIcon(1, IconToExePath(proc.exe_path));
-
         pid_to_item[proc.pid] = item;
     }
 
@@ -610,7 +620,6 @@ void MainWindow::RefreshProcessList()
         }
     }
 
-    // Restore expanded state
     for (int i = 0; i < process_tree_->topLevelItemCount(); ++i)
     {
         auto* item = process_tree_->topLevelItem(i);
@@ -620,7 +629,6 @@ void MainWindow::RefreshProcessList()
         }
     }
 
-    // Restore selection
     if (selected_item != nullptr)
     {
         selected_item->setSelected(true);
