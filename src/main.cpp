@@ -8,7 +8,9 @@
 #include <windows.h>
 
 #include <bit>
+#include <cstdlib>
 #include <dwmapi.h>
+#include <winsvc.h>
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
     #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -18,8 +20,32 @@
     #define DWMWA_CAPTION_COLOR 35
 #endif
 
+namespace
+{
+static void StopWinDivertService()
+{
+    SC_HANDLE scm = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
+    if (scm == nullptr)
+    {
+        return;
+    }
+
+    SC_HANDLE svc = OpenServiceW(scm, L"WinDivert", SERVICE_STOP | DELETE);
+    if (svc != nullptr)
+    {
+        SERVICE_STATUS status{};
+        ControlService(svc, SERVICE_CONTROL_STOP, &status);
+        CloseServiceHandle(svc);
+    }
+
+    CloseServiceHandle(scm);
+}
+}  // namespace
+
 int main(int argc, char* argv[])
 {
+    std::atexit(StopWinDivertService);
+
     QApplication app(argc, argv);
     QApplication::setOrganizationName("Scrambler");
     QApplication::setApplicationName("Scrambler");
