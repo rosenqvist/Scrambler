@@ -15,7 +15,7 @@ Scrambler is a Windows utility designed to simulate poor network conditions for 
 | **Independent direction filtering** | Configure inbound, outbound, or both directions separately for each effect                 |
 | **Global hotkeys** | Adjust delay, drop rate, and toggle effects by using hotkeys with support for modifiers                     |
 | **Sound feedback** | Audible tone on start/stop with configurable volume                                                         |
-| **Persistent settings** | All preferences saved between sessions                                                                 |
+| **Persistent settings** | All settings are saved upon exit                                                                  |
 
 ## How It Works
 Scrambler operates on two WinDivert layers at the same time:

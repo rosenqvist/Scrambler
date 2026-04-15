@@ -4,9 +4,12 @@ namespace scrambler::core
 {
 
 DelayQueue::DelayQueue(HANDLE divert_handle)
-    : divert_handle_(divert_handle), memory_pool_(65536), free_queue_(65536), handoff_queue_(65536)
+    : divert_handle_(divert_handle),
+      memory_pool_(kDelayQueueCapacity),
+      free_queue_(kDelayQueueCapacity),
+      handoff_queue_(kDelayQueueCapacity)
 {
-    for (size_t i = 0; i < 65536; ++i)
+    for (size_t i = 0; i < kDelayQueueCapacity; ++i)
     {
         free_queue_.push(&memory_pool_[i]);
     }

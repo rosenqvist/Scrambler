@@ -28,6 +28,10 @@ constexpr std::size_t kGoldenRatio = 0x9e3779b9;
 // We try to exclude network activity from this process since its mostly noise.
 [[maybe_unused]] constexpr uint32_t kSystemPid = 4;
 [[maybe_unused]] constexpr size_t kStandardMtuSize = 1500;
+// Maximum number of delayed packets moving through the queue.
+// At 1000 packets/sec with a 1000 ms max delay:
+// Total memory: ~6 MB (4096 * ~1.5 KB).
+constexpr size_t kDelayQueueCapacity = 4096;
 
 struct FiveTuple
 {
