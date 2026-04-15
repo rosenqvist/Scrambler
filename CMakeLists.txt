@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Concurrent)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Concurrent Multimedia)
 qt_standard_project_setup()
 
 option(SCRAMBLER_ENABLE_TESTS "Build unit tests" ON)
@@ -70,9 +70,11 @@ add_executable(scrambler
     src/ui/MainWindow.cpp
     src/ui/HotkeyManager.cpp
     src/platform/ProcessEnumerator.cpp
+    src/ui/SoundPlayer.cpp
     include/ui/MainWindow.h
     include/ui/HotkeyManager.h
     include/ui/HotkeyEdit.h
+    include/ui/SoundPlayer.h
 )
 
 # Hide console window in release builds
@@ -107,8 +109,8 @@ target_include_directories(scrambler PRIVATE
 target_link_libraries(scrambler PRIVATE
     Qt6::Widgets
     Qt6::Concurrent
+    Qt6::Multimedia
     WinDivert
-    winmm
     dwmapi
     ws2_32
     iphlpapi

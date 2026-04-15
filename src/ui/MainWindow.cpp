@@ -17,22 +17,23 @@
 
 #include <windows.h>
 
-#include <cmath>
-#include <numbers>
 #include <unordered_map>
 
 namespace scrambler::ui
 {
 
 MainWindow::MainWindow(QWidget* parent)
-    : QMainWindow(parent), refresh_timer_(new QTimer(this)), hotkey_manager_(new HotkeyManager(this))
+    : QMainWindow(parent),
+      refresh_timer_(new QTimer(this)),
+      hotkey_manager_(new HotkeyManager(this)),
+      process_watcher_(new QFutureWatcher<std::vector<platform::ProcessInfo>>(this)),
+      sound_player_(new SoundPlayer(this))
 {
     SetupUi();
 
     connect(refresh_timer_, &QTimer::timeout, this, &MainWindow::RefreshProcessList);
     refresh_timer_->start(5000);
 
-    process_watcher_ = new QFutureWatcher<std::vector<platform::ProcessInfo>>(this);
     connect(process_watcher_,
             &QFutureWatcher<std::vector<platform::ProcessInfo>>::finished,
             this,
@@ -463,56 +464,12 @@ void MainWindow::PlayToggleSound(bool started)
         return;
     }
 
-    int volume = volume_slider_->value();
-    std::thread([started, volume]
-    {
-        constexpr DWORD kSampleRate = 44100;
-        constexpr DWORD kDurationMs = 150;
-        constexpr DWORD kNumSamples = kSampleRate * kDurationMs / 1000;
-        constexpr double kStartToneHz = 800.0;
-        constexpr double kStopToneHz = 400.0;
+    constexpr double kStartToneHz = 800.0;
+    constexpr double kStopToneHz = 400.0;
+    constexpr int kDurationMs = 150;
 
-        double frequency = started ? kStartToneHz : kStopToneHz;
-        double amplitude = static_cast<double>(volume) / 100.0;
-
-        std::array<int16_t, kNumSamples> samples{};
-        for (DWORD i = 0; i < kNumSamples; ++i)
-        {
-            double t = static_cast<double>(i) / static_cast<double>(kSampleRate);
-            double sample = std::sin(2.0 * std::numbers::pi * frequency * t) * amplitude;
-            samples.at(i) = static_cast<int16_t>(sample * 32767.0);
-        }
-
-        WAVEFORMATEX wfx{};
-        wfx.wFormatTag = WAVE_FORMAT_PCM;
-        wfx.nChannels = 1;
-        wfx.nSamplesPerSec = kSampleRate;
-        wfx.wBitsPerSample = 16;
-        wfx.nBlockAlign = wfx.nChannels * wfx.wBitsPerSample / 8;
-        wfx.nAvgBytesPerSec = wfx.nSamplesPerSec * wfx.nBlockAlign;
-
-        HWAVEOUT hwo = nullptr;
-        if (waveOutOpen(&hwo, WAVE_MAPPER, &wfx, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
-        {
-            return;
-        }
-
-        WAVEHDR hdr{};
-        hdr.lpData = reinterpret_cast<LPSTR>(samples.data());
-        hdr.dwBufferLength = static_cast<DWORD>(samples.size() * sizeof(int16_t));
-
-        waveOutPrepareHeader(hwo, &hdr, sizeof(hdr));
-        waveOutWrite(hwo, &hdr, sizeof(hdr));
-
-        // Wait for playback to finish
-        while ((hdr.dwFlags & WHDR_DONE) == 0)
-        {
-            Sleep(1);
-        }
-
-        waveOutUnprepareHeader(hwo, &hdr, sizeof(hdr));
-        waveOutClose(hwo);
-    }).detach();
+    const double frequency = started ? kStartToneHz : kStopToneHz;
+    sound_player_->PlayTone(frequency, kDurationMs, volume_slider_->value());
 }
 
 void MainWindow::OnProcessSelectionChanged()

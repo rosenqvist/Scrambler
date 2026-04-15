@@ -6,6 +6,7 @@
 #include "platform/ProcessEnumerator.h"
 #include "ui/HotkeyEdit.h"
 #include "ui/HotkeyManager.h"
+#include "ui/SoundPlayer.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -103,6 +104,8 @@ private:  // NOLINT(readability-redundant-access-specifiers)
     void OnProcessListReady();
     QFutureWatcher<std::vector<platform::ProcessInfo>>* process_watcher_ = nullptr;
     bool refresh_in_flight_ = false;
+
+    SoundPlayer* sound_player_ = nullptr;
 };
 
 }  // namespace scrambler::ui
