@@ -18,6 +18,7 @@
 #include <QPushButton>
 #include <QSlider>
 #include <QSpinBox>
+#include <QTabWidget>
 #include <QTimer>
 #include <QTreeWidget>
 
@@ -49,21 +50,29 @@ private slots:
     void OnHotkeyTriggered(HotkeyAction action);
 
 private:  // NOLINT(readability-redundant-access-specifiers)
+    // --- Setup ---
     void SetupUi();
     void StartPipeline();
     void StopPipeline();
     void UpdateDriverStatus(const QString& message, bool is_error);
     void PlayToggleSound(bool started);
+    void OnProcessListReady();
+    QIcon IconToExePath(const std::wstring& exe_path);
 
-    // UI widgets:
+    // --- Top-level layout ---
+    QTabWidget* tab_widget_ = nullptr;
     QPushButton* start_stop_button_ = nullptr;
+    QLabel* status_label_ = nullptr;
+
+    // --- Process list ---
     QTreeWidget* process_tree_ = nullptr;
     QLineEdit* process_filter_ = nullptr;
-    QLabel* status_label_ = nullptr;
     QTimer* refresh_timer_ = nullptr;
-    QTabWidget* tab_widget_ = nullptr;
+    QFutureWatcher<std::vector<platform::ProcessInfo>>* process_watcher_ = nullptr;
+    bool refresh_in_flight_ = false;
+    std::unordered_map<std::wstring, QIcon> icon_cache_;
 
-    // Effect controls:
+    // --- Effect controls ---
     QSlider* delay_slider_ = nullptr;
     QSpinBox* delay_spinbox_ = nullptr;
     QComboBox* delay_direction_combo_ = nullptr;
@@ -71,7 +80,7 @@ private:  // NOLINT(readability-redundant-access-specifiers)
     QSpinBox* drop_spinbox_ = nullptr;
     QComboBox* drop_direction_combo_ = nullptr;
 
-    // Hotkey controls:
+    // --- Hotkey controls ---
     HotkeyEdit* toggle_hotkey_edit_ = nullptr;
     HotkeyEdit* inc_delay_hotkey_edit_ = nullptr;
     HotkeyEdit* dec_delay_hotkey_edit_ = nullptr;
@@ -79,33 +88,20 @@ private:  // NOLINT(readability-redundant-access-specifiers)
     HotkeyEdit* dec_drop_hotkey_edit_ = nullptr;
     QSpinBox* delay_step_spinbox_ = nullptr;
     QSpinBox* drop_step_spinbox_ = nullptr;
-    QCheckBox* sound_checkbox_ = nullptr;
-
-    // Volume controls:
-    QSlider* volume_slider_ = nullptr;
-    QLabel* volume_label_ = nullptr;
-
-    // Hotkey manager:
     HotkeyManager* hotkey_manager_ = nullptr;
 
-    // Core pipeline:
+    // --- Sound ---
+    QCheckBox* sound_checkbox_ = nullptr;
+    QSlider* volume_slider_ = nullptr;
+    QLabel* volume_label_ = nullptr;
+    SoundPlayer* sound_player_ = nullptr;
+
+    // --- Core pipeline ---
     core::TargetSet targets_;
     core::EffectConfig effects_;
     std::unique_ptr<core::FlowTracker> flow_tracker_;
     std::unique_ptr<core::PacketInterceptor> interceptor_;
-
     bool running_ = false;
-
-    // Icon cache by exe path
-    // we cache them to avoid disk hits as we refresh the PID list every 3 seconds.
-    std::unordered_map<std::wstring, QIcon> icon_cache_;
-    QIcon IconToExePath(const std::wstring& exe_path);
-
-    void OnProcessListReady();
-    QFutureWatcher<std::vector<platform::ProcessInfo>>* process_watcher_ = nullptr;
-    bool refresh_in_flight_ = false;
-
-    SoundPlayer* sound_player_ = nullptr;
 };
 
 }  // namespace scrambler::ui

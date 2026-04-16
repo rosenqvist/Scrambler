@@ -75,14 +75,6 @@ bool PacketInterceptor::IsRunning() const
     return running_.load();
 }
 
-void PacketInterceptor::Reinject(const uint8_t* data, UINT len, const WINDIVERT_ADDRESS& addr)
-{
-    if (WinDivertSend(handle_, data, len, nullptr, &addr) == 0)
-    {
-        DEBUG_PRINT("[WARN] Reinject failed: {}", GetLastError());
-    }
-}
-
 // Main packet processing pipeline:
 // 1. Capture a UDP packet
 // 2. Parse headers and look up which process owns it
