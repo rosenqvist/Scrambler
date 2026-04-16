@@ -1,20 +1,21 @@
 #include "ui/HotkeyManager.h"
 
 #include <QApplication>
-#include <qnamespace.h>
-#include <qscreen_platform.h>
+#include <QDebug>
+#include <Qnamespace.h>
 #include <QSettings>
-#include <qwidget.h>
+#include <Qwidget.h>
 #include <QWindow>
 
+#include <atomic>
 #include <winuser.h>
 
 namespace scrambler::ui
 {
 
-HotkeyManager* HotkeyManager::instance = nullptr;
-HHOOK HotkeyManager::keyboard_hook = nullptr;
-HHOOK HotkeyManager::mouse_hook = nullptr;
+std::atomic<HotkeyManager*> HotkeyManager::instance{nullptr};
+std::atomic<HHOOK> HotkeyManager::keyboard_hook{nullptr};
+std::atomic<HHOOK> HotkeyManager::mouse_hook{nullptr};
 
 namespace
 {
@@ -62,6 +63,7 @@ UINT QtKeyToVk(int key)
         case Qt::Key_Space:
             return VK_SPACE;
         case Qt::Key_Return:
+        // Windows doesn't distinguish keyboard "Enter" from numpad "Enter" at the VK level
         case Qt::Key_Enter:
             return VK_RETURN;
         case Qt::Key_Escape:
@@ -282,11 +284,19 @@ void HotkeyManager::RegisterAll()
         UnregisterAll();
     }
 
-    // Install low level hooks for keyboard and mouse
-    keyboard_hook = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardHookProc, GetModuleHandle(nullptr), 0);
-    mouse_hook = SetWindowsHookEx(WH_MOUSE_LL, MouseHookProc, GetModuleHandle(nullptr), 0);
+    HHOOK kb = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardHookProc, GetModuleHandle(nullptr), 0);
+    HHOOK mouse = SetWindowsHookEx(WH_MOUSE_LL, MouseHookProc, GetModuleHandle(nullptr), 0);
 
-    registered_ = true;
+    keyboard_hook.store(kb, std::memory_order_release);
+    mouse_hook.store(mouse, std::memory_order_release);
+
+    if (kb == nullptr || mouse == nullptr)
+    {
+        qWarning() << "[HOTKEY] Failed to install hooks. Keyboard:" << (kb != nullptr) << "Mouse:" << (mouse != nullptr)
+                   << "Error:" << GetLastError();
+    }
+
+    registered_ = (kb != nullptr) && (mouse != nullptr);
 }
 
 void HotkeyManager::UnregisterAll()
@@ -356,25 +366,26 @@ void HotkeyManager::CheckAndTrigger(UINT vk, UINT modifiers)
 
 LRESULT CALLBACK HotkeyManager::KeyboardHookProc(int n_code, WPARAM w_param, LPARAM l_param)
 {
-    if (n_code >= 0 && (w_param == WM_KEYDOWN || w_param == WM_SYSKEYDOWN) && instance)
+    auto* inst = instance.load(std::memory_order_acquire);
+    if (n_code >= 0 && (w_param == WM_KEYDOWN || w_param == WM_SYSKEYDOWN) && inst)
     {
         auto* hook_struct = reinterpret_cast<KBDLLHOOKSTRUCT*>(l_param);  // NOLINT(performance-no-int-to-ptr)
         UINT vk = hook_struct->vkCode;
 
-        // Ignore pure modifier presses
         if (vk != VK_CONTROL && vk != VK_SHIFT && vk != VK_MENU && vk != VK_LCONTROL && vk != VK_RCONTROL
             && vk != VK_LSHIFT && vk != VK_RSHIFT && vk != VK_LMENU && vk != VK_RMENU)
         {
-            instance->CheckAndTrigger(vk, GetCurrentModifiers());
+            inst->CheckAndTrigger(vk, GetCurrentModifiers());
         }
     }
 
-    return CallNextHookEx(keyboard_hook, n_code, w_param, l_param);
+    return CallNextHookEx(keyboard_hook.load(std::memory_order_acquire), n_code, w_param, l_param);
 }
 
 LRESULT CALLBACK HotkeyManager::MouseHookProc(int n_code, WPARAM w_param, LPARAM l_param)
 {
-    if (n_code >= 0 && instance)
+    auto* inst = instance.load(std::memory_order_acquire);
+    if (n_code >= 0 && inst != nullptr)
     {
         UINT vk = 0;
         if (w_param == WM_LBUTTONDOWN)
@@ -397,10 +408,10 @@ LRESULT CALLBACK HotkeyManager::MouseHookProc(int n_code, WPARAM w_param, LPARAM
 
         if (vk != 0)
         {
-            instance->CheckAndTrigger(vk, GetCurrentModifiers());
+            inst->CheckAndTrigger(vk, GetCurrentModifiers());
         }
     }
-    return CallNextHookEx(mouse_hook, n_code, w_param, l_param);
+    return CallNextHookEx(mouse_hook.load(std::memory_order_acquire), n_code, w_param, l_param);
 }
 
 void HotkeyManager::SaveSettings()

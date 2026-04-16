@@ -1,5 +1,7 @@
 #include "platform/ProcessEnumerator.h"
 
+#include "core/Types.h"
+
 #include <windows.h>
 
 #include <array>
@@ -116,7 +118,7 @@ std::vector<ProcessInfo> EnumerateProcesses()
         auto parent_pid = static_cast<uint32_t>(entry.th32ParentProcessID);
 
         //* Skip idle + system + self
-        if (pid != 0 && pid != 4 && pid != self_pid)
+        if (pid != 0 && pid != scrambler::core::kSystemPid && pid != self_pid)
         {
             const auto* exe = static_cast<const wchar_t*>(entry.szExeFile);
 

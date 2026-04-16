@@ -5,7 +5,7 @@
 #include <qevent.h>
 #include <QKeyEvent>
 #include <QLineEdit>
-#include <qnamespace.h>
+#include <Qnamespace.h>
 
 #include <windows.h>
 

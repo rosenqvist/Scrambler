@@ -73,9 +73,9 @@ private:
     bool registered_ = false;
 
     // Hook state
-    static HotkeyManager* instance;  // Needed so static callbacks can emit signals
-    static HHOOK keyboard_hook;
-    static HHOOK mouse_hook;
+    static std::atomic<HotkeyManager*> instance;
+    static std::atomic<HHOOK> keyboard_hook;
+    static std::atomic<HHOOK> mouse_hook;
 };
 
 }  // namespace scrambler::ui

@@ -16,7 +16,6 @@
 namespace scrambler::core
 {
 
-[[maybe_unused]] constexpr uint32_t kMaxPacketSize = 65535;
 constexpr uint32_t kIpStringLength = 64;
 // WinDivert stores addresses as 4-element arrays for IPv6 compatibility.
 // For IPv4 the address sits in element 0 only.
@@ -31,7 +30,7 @@ constexpr std::size_t kGoldenRatio = 0x9e3779b9;
 // Maximum number of delayed packets moving through the queue.
 // At 1000 packets/sec with a 1000 ms max delay:
 // Total memory: ~6 MB (4096 * ~1.5 KB).
-constexpr size_t kDelayQueueCapacity = 4096;
+[[maybe_unused]] constexpr size_t kDelayQueueCapacity = 4096;
 
 struct FiveTuple
 {
@@ -53,10 +52,10 @@ struct FiveTuple
     }
 };
 
-// The goal is to combine all (src_addr, dst_addr, scr_port, dst_port, protocol) into one hash value.
-// the reason we do this is to reduce collisions where different tuples might get the same hash value.
-// this might also be overkill since chance of a collision happening is negligible at best
-// any collision that would occur would also be handled by unordered_map internally
+// Combines all five fields into a single hash. A naive XOR would collide badly
+// on common patterns (swapped src/dst, neighbouring ports on the same host).
+// This boost-style combiner spreads bits using a golden-ratio constant + shifts,
+// which keeps the hash well-distributed across flow patterns.
 struct FiveTupleHash
 {
     std::size_t operator()(const FiveTuple& t) const noexcept

@@ -138,6 +138,10 @@ uint32_t FlowTracker::LookupPid(const FiveTuple& tuple)
     return pid;
 }
 
+// Inserts or overwrites both directions of a flow mapping.
+// LookupPid() caches a PID of 0 (meaning "nothing we care about") here to avoid
+// repeated GetExtendedUdpTable() calls. A later FLOW-layer event for the same
+// tuple will overwrite the 0 with the real PID, so the cache regenerates.
 void FlowTracker::InsertFlow(const FiveTuple& tuple, uint32_t pid)
 {
     // Store both directions so packet lookups match regardless of direction

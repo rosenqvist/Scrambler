@@ -44,9 +44,10 @@ void PacketInterceptor::Stop()
 {
     running_.store(false);
 
+    // Stop the capture thread first so nothing new is pushed to delay_queue_
     if (handle_ != INVALID_HANDLE_VALUE)
     {
-        WinDivertShutdown(handle_, WINDIVERT_SHUTDOWN_BOTH);
+        WinDivertShutdown(handle_, WINDIVERT_SHUTDOWN_RECV);
     }
 
     if (thread_.joinable())
@@ -60,8 +61,10 @@ void PacketInterceptor::Stop()
         delay_queue_.reset();
     }
 
+    // Now fully shut down and close.
     if (handle_ != INVALID_HANDLE_VALUE)
     {
+        WinDivertShutdown(handle_, WINDIVERT_SHUTDOWN_SEND);
         WinDivertClose(handle_);
         handle_ = INVALID_HANDLE_VALUE;
     }
