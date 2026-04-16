@@ -89,7 +89,7 @@ void PacketInterceptor::CaptureLoop()
 {
     // Batch config
     constexpr UINT kBatchSize = 128;  // Up to 128 packets per kernel transition
-    constexpr UINT kBatchBufferLen = kBatchSize * kMaxPacketSize;
+    constexpr UINT kBatchBufferLen = kBatchSize * kStandardMtuSize;
 
     // Receive buffers
     std::vector<uint8_t> recv_buf(kBatchBufferLen);
