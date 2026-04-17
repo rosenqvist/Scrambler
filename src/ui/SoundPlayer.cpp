@@ -77,17 +77,12 @@ void SoundPlayer::PlayTone(double frequency_hz, int duration_ms, int volume_perc
 
 void SoundPlayer::Cleanup()
 {
-    if (sink_)
+    auto* sink = std::exchange(sink_, nullptr);
+    if (sink)
     {
-        sink_->stop();
-        sink_->deleteLater();
-        sink_ = nullptr;
-    }
-    if (buffer_)
-    {
-        buffer_->close();
-        buffer_->deleteLater();
-        buffer_ = nullptr;
+        QObject::disconnect(sink, nullptr, this, nullptr);
+        sink->stop();
+        sink->deleteLater();
     }
 }
 
