@@ -3,6 +3,7 @@
 #include "core/Diagnostics.h"
 
 #include <array>
+#include <cstddef>
 #include <span>
 
 namespace scrambler::core
@@ -35,6 +36,19 @@ std::expected<void, StartupError> PacketInterceptor::Start()
         LogError("PacketInterceptor: WinDivertOpen failed (GLE={})", gle);
         CountEvent(Counter::kDriverErrors);
         return std::unexpected(MapWinDivertOpenError(gle));
+    }
+
+    // Driver side queue constants that are safe and tested.
+    constexpr UINT64 kQueueLength = 8192;
+    constexpr auto kQueueSizeBytes = static_cast<const UINT64>(8 * 1024 * 1024);
+
+    if (WinDivertSetParam(handle_, WINDIVERT_PARAM_QUEUE_LENGTH, kQueueLength) == 0)
+    {
+        LogWarn("PacketInterceptor: WinDivertSetParam(QUEUE_LENGTH) failed (GLE={})", GetLastError());
+    }
+    if (WinDivertSetParam(handle_, WINDIVERT_PARAM_QUEUE_SIZE, kQueueSizeBytes) == 0)
+    {
+        LogWarn("PacketInterceptor: WinDivertSetParam(QUEUE_SIZE) failed (GLE={})", GetLastError());
     }
 
     delay_queue_ = std::make_unique<DelayQueue>(handle_);
