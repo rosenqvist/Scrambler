@@ -22,6 +22,8 @@ Scrambler operates on two WinDivert layers at the same time:
 1. The FLOW layer tracks connection events and maps network 5-tuples (source/destination IP and ports, plus protocol) to process IDs.
 2. The NETWORK layer intercepts UDP packets, identifies the owning process using that mapping and applies delay or drop effects when needed.
 
+<img src="docs/screenshots/diagram.png" width="1600">
+
 For flows that existed before Scrambler started, it falls back to querying the Windows UDP table via GetExtendedUdpTable.
 Non-targeted traffic is reinjected immediately with no modification.
 
