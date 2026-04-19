@@ -118,6 +118,7 @@ target_link_libraries(scrambler PRIVATE
     dwmapi
     ws2_32
     iphlpapi
+    winmm
     scrambler_warnings
     scrambler_sanitizers
 )

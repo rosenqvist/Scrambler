@@ -2,8 +2,39 @@
 
 #include "core/Diagnostics.h"
 
+#include <timeapi.h>
+
 namespace scrambler::core
 {
+
+namespace
+{
+class TimerResolutionScope
+{
+public:
+    TimerResolutionScope() noexcept : active_(timeBeginPeriod(kPeriodMs) == TIMERR_NOERROR)
+    {
+    }
+
+    ~TimerResolutionScope()
+    {
+        if (active_)
+        {
+            timeEndPeriod(kPeriodMs);
+        }
+    }
+
+    TimerResolutionScope(const TimerResolutionScope&) = delete;
+    TimerResolutionScope& operator=(const TimerResolutionScope&) = delete;
+    TimerResolutionScope(TimerResolutionScope&&) = delete;
+    TimerResolutionScope& operator=(TimerResolutionScope&&) = delete;
+
+private:
+    static constexpr UINT kPeriodMs = 1;
+    bool active_ = false;
+};
+
+}  // namespace
 
 DelayQueue::DelayQueue(HANDLE divert_handle)
     : divert_handle_(divert_handle),
@@ -113,6 +144,8 @@ void DelayQueue::Reinject(const DelayedPacket* pkt)
 
 void DelayQueue::DrainLoop()
 {
+    TimerResolutionScope timer_scope;
+
     constexpr UINT kBatchSize = 128;
     constexpr UINT kBatchBufferLen = kBatchSize * kStandardMtuSize;
 
