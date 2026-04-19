@@ -3,7 +3,6 @@
 #include "core/Diagnostics.h"
 
 #include <array>
-#include <cstddef>
 #include <span>
 
 namespace scrambler::core

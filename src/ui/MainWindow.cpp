@@ -24,6 +24,35 @@
 namespace scrambler::ui
 {
 
+namespace
+{
+// Recursively filters the tree. A node is visible if it matches the text itself.
+bool FilterTreeItem(QTreeWidgetItem* item, const QString& text)
+{
+    bool self_matches = text.isEmpty() || item->text(0).contains(text, Qt::CaseInsensitive)
+                        || item->text(1).contains(text, Qt::CaseInsensitive);
+
+    bool any_descendant_matches = false;
+    for (int i = 0; i < item->childCount(); ++i)
+    {
+        if (FilterTreeItem(item->child(i), text))
+        {
+            any_descendant_matches = true;
+        }
+    }
+
+    item->setHidden(!self_matches && !any_descendant_matches);
+
+    // Expand ancestors of a match so the user can see it.
+    if (!text.isEmpty() && any_descendant_matches)
+    {
+        item->setExpanded(true);
+    }
+
+    return self_matches || any_descendant_matches;
+}
+}  // namespace
+
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       refresh_timer_(new QTimer(this)),
@@ -519,24 +548,7 @@ void MainWindow::OnProcessFilterChanged(const QString& text)
 {
     for (int i = 0; i < process_tree_->topLevelItemCount(); ++i)
     {
-        auto* parent = process_tree_->topLevelItem(i);
-        bool any_child_matches = false;
-
-        for (int j = 0; j < parent->childCount(); ++j)
-        {
-            auto* child = parent->child(j);
-            bool child_matches = text.isEmpty() || child->text(0).contains(text, Qt::CaseInsensitive)
-                                 || child->text(1).contains(text, Qt::CaseInsensitive);
-            child->setHidden(!child_matches);
-            if (child_matches)
-            {
-                any_child_matches = true;
-            }
-        }
-
-        bool parent_matches = text.isEmpty() || parent->text(0).contains(text, Qt::CaseInsensitive)
-                              || parent->text(1).contains(text, Qt::CaseInsensitive);
-        parent->setHidden(!parent_matches && !any_child_matches);
+        FilterTreeItem(process_tree_->topLevelItem(i), text);
     }
 }
 
