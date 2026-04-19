@@ -33,6 +33,7 @@ enum class Counter : uint8_t
     kPacketsDelayedOutbound,
     kPacketsDelayedInbound,
     kPoolExhausted,
+    kPacketsOversized,
     kReinjectFailures,
     kParseFailures,
     // Flow lookup resolved from the in-memory maps (tuple map or port index).

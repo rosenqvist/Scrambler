@@ -240,8 +240,10 @@ HotkeyManager::HotkeyManager(QObject* parent) : QObject(parent)
 
 HotkeyManager::~HotkeyManager()
 {
+    // Null the singleton first so any in-flight hook callback sees null and
+    // bails before touching bindings_, which is about to be destroyed.
+    instance.store(nullptr, std::memory_order_release);
     UnregisterAll();
-    instance = nullptr;
 }
 
 void HotkeyManager::SetBinding(HotkeyAction action, const HotkeyBinding& binding)

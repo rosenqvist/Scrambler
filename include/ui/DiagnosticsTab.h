@@ -52,6 +52,7 @@ private:  // NOLINT(readability-redundant-access-specifiers)
     QLabel* packets_dropped_value_ = nullptr;
     QLabel* packets_delayed_value_ = nullptr;
     QLabel* pool_exhausted_value_ = nullptr;
+    QLabel* packets_oversized_value_ = nullptr;
     QLabel* reinject_failures_value_ = nullptr;
     QLabel* parse_failures_value_ = nullptr;
     QLabel* flow_cache_hits_value_ = nullptr;

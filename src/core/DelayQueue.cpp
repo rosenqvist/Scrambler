@@ -81,6 +81,13 @@ void DelayQueue::Push(std::span<const uint8_t> packet_data,
 {
     if (packet_data.size() > kStandardMtuSize)
     {
+        static std::atomic<uint64_t> occurrences{0};
+        LogRateLimited(occurrences,
+                       LogLevel::kWarn,
+                       "DelayQueue: dropping oversized packet ({} bytes > {} MTU)",
+                       packet_data.size(),
+                       kStandardMtuSize);
+        CountEvent(Counter::kPacketsOversized);
         return;
     }
 

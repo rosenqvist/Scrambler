@@ -16,8 +16,6 @@
 #include <QtConcurrent>
 #include <QVBoxLayout>
 
-#include <windows.h>
-
 #include <unordered_map>
 #include <utility>
 
@@ -109,6 +107,14 @@ void MainWindow::SetupUi()
     process_tree_->sortByColumn(1, Qt::AscendingOrder);
     process_tree_->header()->setStretchLastSection(true);
     process_tree_->setColumnWidth(0, 80);
+
+    // Placeholder shown until the first enumeration completes. OnProcessListReady
+    // clears the tree before populating it so this vanishes on the first tick.
+    auto* loading_item = new QTreeWidgetItem();
+    loading_item->setText(1, "Loading processes...");
+    loading_item->setDisabled(true);
+    process_tree_->addTopLevelItem(loading_item);
+
     process_layout->addWidget(process_tree_);
 
     network_layout->addWidget(process_group);
@@ -134,7 +140,6 @@ void MainWindow::SetupUi()
     };
 
     // Delay row:
-    // Delay row
     auto* delay_layout = new QHBoxLayout();
     auto* delay_label = new QLabel("Delay (ms):");
     delay_label->setFixedWidth(60);
