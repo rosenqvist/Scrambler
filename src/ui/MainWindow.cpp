@@ -10,6 +10,7 @@
 #include <QHeaderView>
 #include <QIcon>
 #include <QMessageBox>
+#include <QMetaObject>
 #include <QSettings>
 #include <QStatusBar>
 #include <QtConcurrent>
@@ -18,6 +19,7 @@
 #include <windows.h>
 
 #include <unordered_map>
+#include <utility>
 
 namespace scrambler::ui
 {
@@ -25,8 +27,8 @@ namespace scrambler::ui
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       refresh_timer_(new QTimer(this)),
-      hotkey_manager_(new HotkeyManager(this)),
       process_watcher_(new QFutureWatcher<std::vector<platform::ProcessInfo>>(this)),
+      hotkey_manager_(new HotkeyManager(this)),
       sound_player_(new SoundPlayer(this))
 {
     SetupUi();
@@ -214,6 +216,10 @@ void MainWindow::SetupUi()
 
     tab_widget_->addTab(settings_tab, "Settings");
 
+    // Tab 3: Diagnostics
+    diagnostics_tab_ = new DiagnosticsTab();
+    tab_widget_->addTab(diagnostics_tab_, "Diagnostics");
+
     main_layout->addWidget(tab_widget_);
 
     // Status bar:
@@ -382,19 +388,32 @@ void MainWindow::StartPipeline()
         return;
     }
 
-    flow_tracker_ = std::make_unique<core::FlowTracker>();
-    if (!flow_tracker_->Start())
+    // Hop from the capture thread to the UI thread. Using `this` as the
+    // receiver for invokeMethod means the event gets dropped if MainWindow
+    // dies first.
+    auto fatal_handler = [this](uint32_t gle)
     {
-        UpdateDriverStatus("FlowTracker failed to start (run as admin?)", true);
+        QMetaObject::invokeMethod(this, &MainWindow::OnPipelineFatal, Qt::QueuedConnection, gle);
+    };
+
+    flow_tracker_ = std::make_unique<core::FlowTracker>();
+    flow_tracker_->SetFatalCallback(fatal_handler);
+
+    if (auto result = flow_tracker_->Start(); !result)
+    {
+        UpdateDriverStatus(QString::fromUtf8(core::ToUserMessage(result.error())), true);
         flow_tracker_.reset();
         return;
     }
 
     interceptor_ = std::make_unique<core::PacketInterceptor>(*flow_tracker_, targets_, effects_);
-    if (!interceptor_->Start())
+    interceptor_->SetFatalCallback(std::move(fatal_handler));
+
+    if (auto result = interceptor_->Start(); !result)
     {
-        UpdateDriverStatus("PacketInterceptor failed to start", true);
-        flow_tracker_->Stop();
+        UpdateDriverStatus(QString::fromUtf8(core::ToUserMessage(result.error())), true);
+        // Reset interceptor first since it holds a reference to *flow_tracker_.
+        interceptor_.reset();
         flow_tracker_.reset();
         return;
     }
@@ -404,6 +423,18 @@ void MainWindow::StartPipeline()
     start_stop_button_->setText("Stop");
     UpdateDriverStatus("Running", false);
     PlayToggleSound(true);
+}
+
+void MainWindow::OnPipelineFatal(quint32 gle)
+{
+    // The user may have clicked Stop before this queued event was delivered.
+    if (!running_)
+    {
+        return;
+    }
+
+    StopPipeline();
+    UpdateDriverStatus(QString("Pipeline stopped unexpectedly (GLE=%1)").arg(gle), true);
 }
 
 void MainWindow::StopPipeline()

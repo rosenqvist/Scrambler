@@ -4,6 +4,7 @@
 #include "core/FlowTracker.h"
 #include "core/PacketInterceptor.h"
 #include "platform/ProcessEnumerator.h"
+#include "ui/DiagnosticsTab.h"
 #include "ui/HotkeyEdit.h"
 #include "ui/HotkeyManager.h"
 #include "ui/SoundPlayer.h"
@@ -48,6 +49,10 @@ private slots:
     void OnProcessSelectionChanged();
     void RefreshProcessList();
     void OnHotkeyTriggered(HotkeyAction action);
+    // Invoked on the UI thread (via queued connection) when the core pipeline
+    // exits due to a terminal driver error. Tears down the pipeline and
+    // visually show the GLE in the status bar.
+    void OnPipelineFatal(quint32 gle);
 
 private:  // NOLINT(readability-redundant-access-specifiers)
     // --- Setup ---
@@ -95,6 +100,9 @@ private:  // NOLINT(readability-redundant-access-specifiers)
     QSlider* volume_slider_ = nullptr;
     QLabel* volume_label_ = nullptr;
     SoundPlayer* sound_player_ = nullptr;
+
+    // --- Diagnostics ---
+    DiagnosticsTab* diagnostics_tab_ = nullptr;
 
     // --- Core pipeline ---
     core::TargetSet targets_;

@@ -1,5 +1,7 @@
 #include "core/DelayQueue.h"
 
+#include "core/Diagnostics.h"
+
 namespace scrambler::core
 {
 
@@ -58,7 +60,11 @@ void DelayQueue::Push(std::span<const uint8_t> packet_data,
     // This prevents WinDivert's capture loop from ever being blocked
     if (!free_pkt_ptr)
     {
-        DEBUG_PRINT("[WARN] Free queue empty, dropped packet to save interceptor loop!");
+        static std::atomic<uint64_t> occurrences{0};
+        LogRateLimited(occurrences,
+                       LogLevel::kWarn,
+                       "DelayQueue: free pool exhausted, dropping packet to avoid blocking capture loop");
+        CountEvent(Counter::kPoolExhausted);
         return;
     }
 
@@ -99,7 +105,9 @@ void DelayQueue::Reinject(const DelayedPacket* pkt)
 {
     if (WinDivertSend(divert_handle_, pkt->data.data(), pkt->length, nullptr, &pkt->addr) == 0)
     {
-        DEBUG_PRINT("[WARN] Reinject failed: {}", GetLastError());
+        static std::atomic<uint64_t> occurrences{0};
+        LogRateLimited(occurrences, LogLevel::kWarn, "DelayQueue: WinDivertSend failed (GLE={})", GetLastError());
+        CountEvent(Counter::kReinjectFailures);
     }
 }
 
@@ -156,7 +164,17 @@ void DelayQueue::DrainLoop()
                                 nullptr)
                 == 0)
             {
-                DEBUG_PRINT("[WARN] DelayQueue Batch Reinject failed: {}", GetLastError());
+                static std::atomic<uint64_t> occurrences{0};
+                LogRateLimited(occurrences,
+                               LogLevel::kWarn,
+                               "DelayQueue: batch WinDivertSendEx failed (GLE={}, packets={})",
+                               GetLastError(),
+                               send_count);
+                CountEvent(Counter::kReinjectFailures, send_count);
+            }
+            else
+            {
+                CountEvent(Counter::kPacketsReinjected, send_count);
             }
         }
 

@@ -1,5 +1,7 @@
 #include "core/PacketInterceptor.h"
 
+#include "core/Diagnostics.h"
+
 #include <array>
 #include <span>
 
@@ -16,16 +18,23 @@ PacketInterceptor::~PacketInterceptor()
     Stop();
 }
 
-bool PacketInterceptor::Start()
+std::expected<void, StartupError> PacketInterceptor::Start()
 {
+    if (running_.load())
+    {
+        return std::unexpected(StartupError::kAlreadyRunning);
+    }
+
     // NETWORK layer with no flags, used to intercept packets (not just sniff)
     // so we can hold, delay or drop packets before reinjecting them
     handle_ = WinDivertOpen("udp", WINDIVERT_LAYER_NETWORK, 0, 0);
 
     if (handle_ == INVALID_HANDLE_VALUE)
     {
-        DEBUG_PRINT("[NET] WinDivertOpen failed: {}", GetLastError());
-        return false;
+        const DWORD gle = GetLastError();
+        LogError("PacketInterceptor: WinDivertOpen failed (GLE={})", gle);
+        CountEvent(Counter::kDriverErrors);
+        return std::unexpected(MapWinDivertOpenError(gle));
     }
 
     delay_queue_ = std::make_unique<DelayQueue>(handle_);
@@ -36,13 +45,27 @@ bool PacketInterceptor::Start()
     {
         CaptureLoop();
     });
-    DEBUG_PRINT("[NET] Capturing UDP packets...");
-    return true;
+    LogInfo("PacketInterceptor running");
+    return {};
+}
+
+void PacketInterceptor::SetFatalCallback(FatalCallback cb)
+{
+    fatal_cb_ = std::move(cb);
+}
+
+void PacketInterceptor::NotifyFatal(uint32_t gle)
+{
+    if (fatal_cb_)
+    {
+        fatal_cb_(gle);
+    }
 }
 
 void PacketInterceptor::Stop()
 {
-    running_.store(false);
+    // exchange() so a destructor-after-never-started doesn't log a phantom "stopped" event.
+    const bool was_running = running_.exchange(false);
 
     // Stop the capture thread first so nothing new is pushed to delay_queue_
     if (handle_ != INVALID_HANDLE_VALUE)
@@ -67,6 +90,11 @@ void PacketInterceptor::Stop()
         WinDivertShutdown(handle_, WINDIVERT_SHUTDOWN_SEND);
         WinDivertClose(handle_);
         handle_ = INVALID_HANDLE_VALUE;
+    }
+
+    if (was_running)
+    {
+        LogInfo("PacketInterceptor stopped");
     }
 }
 
@@ -94,6 +122,8 @@ void PacketInterceptor::CaptureLoop()
     std::vector<uint8_t> send_buf(kBatchBufferLen);
     std::vector<WINDIVERT_ADDRESS> send_addrs(kBatchSize);
 
+    uint32_t consecutive_failures = 0;
+
     while (running_.load())
     {
         UINT recv_len = 0;
@@ -104,10 +134,37 @@ void PacketInterceptor::CaptureLoop()
                 handle_, recv_buf.data(), kBatchBufferLen, &recv_len, 0, recv_addrs.data(), &addr_len, nullptr)
             == 0)
         {
-            continue;
+            const DWORD gle = GetLastError();
+            switch (ClassifyRecvFailure(gle, consecutive_failures, "PacketInterceptor"))
+            {
+                case RecvFailureAction::kContinue:
+                    continue;
+                case RecvFailureAction::kExitClean:
+                    return;
+                case RecvFailureAction::kExitFatal:
+                    NotifyFatal(gle);
+                    return;
+            }
         }
 
+        consecutive_failures = 0;
+
         UINT num_packets = addr_len / sizeof(WINDIVERT_ADDRESS);
+
+        // Count direction up front. The per-packet loop only reads addr.Outbound
+        // when a packet matches a tracked PID, so we'd miss the majority otherwise.
+        // recv_addrs is gonna be hot in cache here. Two atomic fetch_adds per batch keep
+        // the hot path cost unchanged.
+        UINT outbound_count = 0;
+        for (UINT i = 0; i < num_packets; ++i)
+        {
+            if (recv_addrs[i].Outbound != 0)
+            {
+                ++outbound_count;
+            }
+        }
+        CountEvent(Counter::kPacketsCapturedOutbound, outbound_count);
+        CountEvent(Counter::kPacketsCapturedInbound, num_packets - outbound_count);
 
         uint8_t* current_pkt = recv_buf.data();
         UINT current_remaining = recv_len;
@@ -142,6 +199,14 @@ void PacketInterceptor::CaptureLoop()
                 == 0)
             {
                 // If a packet is malformed or corrupted we abandon the rest of this batch
+                static std::atomic<uint64_t> occurrences{0};
+                LogRateLimited(
+                    occurrences,
+                    LogLevel::kWarn,
+                    "PacketInterceptor: WinDivertHelperParsePacket failed, abandoning rest of batch ({} of {})",
+                    i,
+                    num_packets);
+                CountEvent(Counter::kParseFailures);
                 break;
             }
 
@@ -171,6 +236,7 @@ void PacketInterceptor::CaptureLoop()
                                     tuple.dst_port,
                                     pkt_len);
 #endif
+                        CountEvent(is_outbound ? Counter::kPacketsDroppedOutbound : Counter::kPacketsDroppedInbound);
                         handled = true;
                     }
                     // Apply Delay Effect
@@ -190,6 +256,8 @@ void PacketInterceptor::CaptureLoop()
                                         pkt_len,
                                         delay.count());
 #endif
+                            CountEvent(is_outbound ? Counter::kPacketsDelayedOutbound
+                                                   : Counter::kPacketsDelayedInbound);
                             delay_queue_->Push(std::span(current_pkt, pkt_len), addr, delay);
                             handled = true;
                         }
@@ -231,7 +299,17 @@ void PacketInterceptor::CaptureLoop()
                                 nullptr)
                 == 0)
             {
-                DEBUG_PRINT("[WARN] Batch Reinject failed: {}", GetLastError());
+                static std::atomic<uint64_t> occurrences{0};
+                LogRateLimited(occurrences,
+                               LogLevel::kWarn,
+                               "PacketInterceptor: batch WinDivertSendEx failed (GLE={}, packets={})",
+                               GetLastError(),
+                               send_count);
+                CountEvent(Counter::kReinjectFailures, send_count);
+            }
+            else
+            {
+                CountEvent(Counter::kPacketsReinjected, send_count);
             }
         }
     }

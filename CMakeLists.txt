@@ -71,10 +71,14 @@ add_executable(scrambler
     src/ui/HotkeyManager.cpp
     src/platform/ProcessEnumerator.cpp
     src/ui/SoundPlayer.cpp
+    src/core/Diagnostics.cpp
+    src/core/StartupError.cpp
+    src/ui/DiagnosticsTab.cpp
     include/ui/MainWindow.h
     include/ui/HotkeyManager.h
     include/ui/HotkeyEdit.h
     include/ui/SoundPlayer.h
+    include/ui/DiagnosticsTab.h
 )
 
 # Hide console window in release builds

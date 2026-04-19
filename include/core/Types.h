@@ -31,6 +31,10 @@ constexpr std::size_t kGoldenRatio = 0x9e3779b9;
 // At 1000 packets/sec with a 1000 ms max delay:
 // Total memory: ~6 MB (4096 * ~1.5 KB).
 [[maybe_unused]] constexpr size_t kDelayQueueCapacity = 4096;
+// How many consecutive WinDivertRecv* failures a capture loop tolerates before
+// declaring the driver dead and exiting. Large enough to ride out a brief
+// driver hiccup. Small enough that a truly broken driver doesn't burn CPU.
+[[maybe_unused]] constexpr uint32_t kMaxConsecutiveRecvFailures = 32;
 
 struct FiveTuple
 {
