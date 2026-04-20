@@ -230,7 +230,7 @@ void PacketInterceptor::CaptureLoop()
             if (ip && udp)
             {
                 auto tuple = TupleFromPacket(*ip, *udp);
-                auto pid = flow_tracker_.LookupPid(tuple);
+                auto pid = flow_tracker_.LookupPid(tuple, addr.Outbound != 0);
 
                 if (pid != 0 && targets_.Contains(pid))
                 {

@@ -46,7 +46,7 @@ public:
     std::expected<void, StartupError> Start();
     void Stop();
     bool IsRunning() const;
-    uint32_t LookupPid(const FiveTuple& tuple);
+    uint32_t LookupPid(const FiveTuple& tuple, bool is_outbound);
 
     // Must be set before Start(). Not thread-safe against a running tracker.
     void SetFatalCallback(FatalCallback cb);
@@ -58,19 +58,17 @@ private:
     void OnFlowEstablished(const FiveTuple& tuple, uint32_t pid);
     void OnFlowDeleted(const FiveTuple& tuple);
     void InsertFlow(const FiveTuple& tuple, uint32_t pid);
-    void EraseFlow(const FiveTuple& tuple);
     void NotifyFatal(uint32_t gle);
-    // Snapshot the current UDP table and populate port_to_pid_. Called once
+    // Snapshot the current UDP table and populate endpoint_to_pid_. Called once
     // from Start() so flows that were already open when we attached show up
     // as cache hits instead of first-packet kernel scans.
     void BootstrapFromSystem();
 
     FlowTable flow_table_;
-    // Secondary index keyed by local port only, populated from GetExtendedUdpTable
-    // at Start() and kept warm by OnFlowEstablished. Used as a fallback when
-    // flow_table_ misses. Covers pre-existing flows (no FLOW_ESTABLISHED event
-    // ever fired for them) without paying for a kernel scan.
-    std::unordered_map<uint16_t, uint32_t> port_to_pid_;
+    // Secondary index keyed by local IPv4 address + local port, populated from
+    // GetExtendedUdpTable at Start() and kept warm by OnFlowEstablished.
+    // Used as a fallback when flow_table_ misses.
+    std::unordered_map<uint64_t, uint32_t> endpoint_to_pid_;
     mutable std::shared_mutex mutex_;
     std::jthread thread_;
     std::atomic<bool> running_{false};
