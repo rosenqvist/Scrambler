@@ -1,5 +1,5 @@
 # Scrambler
-Scrambler is a Windows utility designed to simulate poor network conditions for testing purposes. It leverages WinDivert to intercept UDP traffic at the kernel level, allowing it to selectively delay or drop packets for specific processes. This can help developers test their applications under certain network conditions.
+Scrambler is a Windows utility desig ned to simulate poor network conditions for testing purposes. It leverages WinDivert to intercept UDP (IPv4) traffic at the kernel level, allowing it to selectively delay or drop packets for specific processes. This can help developers test their applications under certain network conditions. 
 
 | Main Window | Settings Window |
 |-------------|----------------|
