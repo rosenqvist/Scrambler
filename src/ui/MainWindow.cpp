@@ -153,7 +153,7 @@ void MainWindow::SetupUi()
     {
         auto* layout = new QHBoxLayout();
         auto* label = new QLabel(label_text);
-        label->setFixedWidth(72);
+        label->setFixedWidth(104);
         checkbox = new QCheckBox("Asymmetric");
         slider = new QSlider(Qt::Horizontal);
         slider->setRange(0, max_value);
@@ -166,6 +166,21 @@ void MainWindow::SetupUi()
         layout->addWidget(slider);
         layout->addWidget(spinbox);
         layout->addWidget(checkbox);
+        return layout;
+    };
+
+    auto make_labeled_effect_row = [&](const QString& label_text,
+                                       int max_value,
+                                       const QString& suffix,
+                                       QSlider*& slider,
+                                       QSpinBox*& spinbox) -> QHBoxLayout*
+    {
+        auto* layout = new QHBoxLayout();
+        auto* label = new QLabel(label_text);
+        label->setFixedWidth(104);
+        auto* controls = make_effect_controls(max_value, suffix, slider, spinbox);
+        layout->addWidget(label);
+        layout->addLayout(controls);
         return layout;
     };
 
@@ -221,6 +236,86 @@ void MainWindow::SetupUi()
                               inbound_drop_slider_,
                               inbound_drop_spinbox_);
     effects_layout->addWidget(drop_asymmetric_controls_);
+
+    auto* duplicate_row = new QHBoxLayout();
+    auto* duplicate_label = new QLabel("Duplicate:");
+    duplicate_label->setFixedWidth(104);
+    duplicate_custom_count_checkbox_ = new QCheckBox("Custom copies");
+    duplicate_asymmetric_checkbox_ = new QCheckBox("Asymmetric");
+    duplicate_slider_ = new QSlider(Qt::Horizontal);
+    duplicate_slider_->setRange(0, 100);
+    duplicate_slider_->setValue(0);
+    duplicate_spinbox_ = new QSpinBox();
+    duplicate_spinbox_->setRange(0, 100);
+    duplicate_spinbox_->setSuffix(" %");
+    duplicate_spinbox_->setFixedWidth(72);
+    duplicate_row->addWidget(duplicate_label);
+    duplicate_row->addWidget(duplicate_slider_);
+    duplicate_row->addWidget(duplicate_spinbox_);
+    duplicate_row->addWidget(duplicate_custom_count_checkbox_);
+    duplicate_row->addWidget(duplicate_asymmetric_checkbox_);
+    effects_layout->addLayout(duplicate_row);
+
+    duplicate_count_controls_ = new QWidget();
+    auto* duplicate_count_layout = new QVBoxLayout(duplicate_count_controls_);
+    duplicate_count_layout->setContentsMargins(24, 0, 0, 0);
+    duplicate_count_layout->addLayout(make_labeled_effect_row(
+        "Extra copies:", core::kMaxDuplicateCopies, "", duplicate_count_slider_, duplicate_count_spinbox_));
+    duplicate_count_controls_->setVisible(false);
+    effects_layout->addWidget(duplicate_count_controls_);
+
+    duplicate_asymmetric_controls_ = new QWidget();
+    auto* duplicate_layout = new QVBoxLayout(duplicate_asymmetric_controls_);
+    duplicate_layout->setContentsMargins(24, 0, 0, 0);
+
+    auto make_duplicate_direction_row =
+        [&](const QString& label_text, int max_value, const QString& suffix, QSlider*& slider, QSpinBox*& spinbox)
+    {
+        auto* row = new QHBoxLayout();
+        auto* label = new QLabel(label_text);
+        label->setFixedWidth(88);
+        row->addWidget(label);
+        row->addLayout(make_effect_controls(max_value, suffix, slider, spinbox));
+        duplicate_layout->addLayout(row);
+    };
+
+    make_duplicate_direction_row("Out chance:", 100, " %", outbound_duplicate_slider_, outbound_duplicate_spinbox_);
+    make_duplicate_direction_row("In chance:", 100, " %", inbound_duplicate_slider_, inbound_duplicate_spinbox_);
+
+    duplicate_count_asymmetric_controls_ = new QWidget();
+    auto* duplicate_count_asymmetric_layout = new QVBoxLayout(duplicate_count_asymmetric_controls_);
+    duplicate_count_asymmetric_layout->setContentsMargins(0, 0, 0, 0);
+
+    auto make_duplicate_count_direction_row = [&](const QString& label_text, QSlider*& slider, QSpinBox*& spinbox)
+    {
+        auto* row = new QHBoxLayout();
+        auto* label = new QLabel(label_text);
+        label->setFixedWidth(88);
+        row->addWidget(label);
+        row->addLayout(make_effect_controls(core::kMaxDuplicateCopies, "", slider, spinbox));
+        duplicate_count_asymmetric_layout->addLayout(row);
+    };
+
+    make_duplicate_count_direction_row("Out copies:",
+                                       outbound_duplicate_count_slider_,
+                                       outbound_duplicate_count_spinbox_);
+    make_duplicate_count_direction_row("In copies:", inbound_duplicate_count_slider_, inbound_duplicate_count_spinbox_);
+    duplicate_count_asymmetric_controls_->setVisible(false);
+    duplicate_layout->addWidget(duplicate_count_asymmetric_controls_);
+    duplicate_asymmetric_controls_->setVisible(false);
+    effects_layout->addWidget(duplicate_asymmetric_controls_);
+
+    auto initialize_duplicate_count_control = [](QSlider* slider, QSpinBox* spinbox)
+    {
+        slider->setRange(core::kDefaultDuplicateCopies, core::kMaxDuplicateCopies);
+        slider->setValue(core::kDefaultDuplicateCopies);
+        spinbox->setRange(core::kDefaultDuplicateCopies, core::kMaxDuplicateCopies);
+        spinbox->setValue(core::kDefaultDuplicateCopies);
+    };
+
+    initialize_duplicate_count_control(duplicate_count_slider_, duplicate_count_spinbox_);
+    initialize_duplicate_count_control(outbound_duplicate_count_slider_, outbound_duplicate_count_spinbox_);
+    initialize_duplicate_count_control(inbound_duplicate_count_slider_, inbound_duplicate_count_spinbox_);
 
     network_layout->addWidget(effects_group);
 
@@ -349,6 +444,12 @@ void MainWindow::SetupUi()
     connect_slider_pair(inbound_delay_slider_, inbound_delay_spinbox_);
     connect_slider_pair(outbound_drop_slider_, outbound_drop_spinbox_);
     connect_slider_pair(inbound_drop_slider_, inbound_drop_spinbox_);
+    connect_slider_pair(duplicate_slider_, duplicate_spinbox_);
+    connect_slider_pair(outbound_duplicate_slider_, outbound_duplicate_spinbox_);
+    connect_slider_pair(inbound_duplicate_slider_, inbound_duplicate_spinbox_);
+    connect_slider_pair(duplicate_count_slider_, duplicate_count_spinbox_);
+    connect_slider_pair(outbound_duplicate_count_slider_, outbound_duplicate_count_spinbox_);
+    connect_slider_pair(inbound_duplicate_count_slider_, inbound_duplicate_count_spinbox_);
 
     auto sync_slider_value = [](QSlider* slider, int value)
     {
@@ -356,6 +457,17 @@ void MainWindow::SetupUi()
         {
             slider->setValue(value);
         }
+    };
+
+    auto update_duplicate_copy_controls_visibility = [this]()
+    {
+        const bool custom_copies = duplicate_custom_count_checkbox_->isChecked();
+        const bool asymmetric = duplicate_asymmetric_checkbox_->isChecked();
+
+        duplicate_count_controls_->setVisible(custom_copies && !asymmetric);
+        duplicate_count_asymmetric_controls_->setVisible(custom_copies && asymmetric);
+        duplicate_count_slider_->setEnabled(custom_copies && !asymmetric);
+        duplicate_count_spinbox_->setEnabled(custom_copies && !asymmetric);
     };
 
     connect(delay_slider_,
@@ -413,6 +525,104 @@ void MainWindow::SetupUi()
         effects_.SetDropRate(false, static_cast<float>(value) / 100.0F);
     });
 
+    connect(duplicate_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this, sync_slider_value](int value)
+    {
+        const float rate = static_cast<float>(value) / 100.0F;
+        effects_.SetDuplicateRate(true, rate);
+        effects_.SetDuplicateRate(false, rate);
+        sync_slider_value(outbound_duplicate_slider_, value);
+        sync_slider_value(inbound_duplicate_slider_, value);
+    });
+
+    connect(outbound_duplicate_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this](int value)
+    {
+        effects_.SetDuplicateRate(true, static_cast<float>(value) / 100.0F);
+    });
+
+    connect(inbound_duplicate_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this](int value)
+    {
+        effects_.SetDuplicateRate(false, static_cast<float>(value) / 100.0F);
+    });
+
+    connect(duplicate_count_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this, sync_slider_value](int value)
+    {
+        if (!duplicate_custom_count_checkbox_->isChecked())
+        {
+            return;
+        }
+
+        effects_.SetDuplicateCount(true, value);
+        effects_.SetDuplicateCount(false, value);
+        sync_slider_value(outbound_duplicate_count_slider_, value);
+        sync_slider_value(inbound_duplicate_count_slider_, value);
+    });
+
+    connect(outbound_duplicate_count_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this](int value)
+    {
+        if (!duplicate_custom_count_checkbox_->isChecked())
+        {
+            return;
+        }
+
+        effects_.SetDuplicateCount(true, value);
+    });
+
+    connect(inbound_duplicate_count_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this](int value)
+    {
+        if (!duplicate_custom_count_checkbox_->isChecked())
+        {
+            return;
+        }
+
+        effects_.SetDuplicateCount(false, value);
+    });
+
+    connect(duplicate_custom_count_checkbox_,
+            &QCheckBox::toggled,
+            this,
+            [this, update_duplicate_copy_controls_visibility](bool checked)
+    {
+        if (checked)
+        {
+            if (duplicate_asymmetric_checkbox_->isChecked())
+            {
+                effects_.SetDuplicateCount(true, outbound_duplicate_count_slider_->value());
+                effects_.SetDuplicateCount(false, inbound_duplicate_count_slider_->value());
+            }
+            else
+            {
+                const int shared_count = duplicate_count_slider_->value();
+                effects_.SetDuplicateCount(true, shared_count);
+                effects_.SetDuplicateCount(false, shared_count);
+            }
+        }
+        else
+        {
+            effects_.SetDuplicateCount(true, core::kDefaultDuplicateCopies);
+            effects_.SetDuplicateCount(false, core::kDefaultDuplicateCopies);
+        }
+
+        update_duplicate_copy_controls_visibility();
+    });
+
     connect(delay_asymmetric_checkbox_,
             &QCheckBox::toggled,
             this,
@@ -454,6 +664,40 @@ void MainWindow::SetupUi()
         drop_spinbox_->setEnabled(!checked);
         drop_asymmetric_controls_->setVisible(checked);
     });
+
+    connect(duplicate_asymmetric_checkbox_,
+            &QCheckBox::toggled,
+            this,
+            [this, update_duplicate_copy_controls_visibility](bool checked)
+    {
+        if (checked)
+        {
+            const int shared_value = duplicate_slider_->value();
+            outbound_duplicate_slider_->setValue(shared_value);
+            inbound_duplicate_slider_->setValue(shared_value);
+            if (duplicate_custom_count_checkbox_->isChecked())
+            {
+                const int shared_count = duplicate_count_slider_->value();
+                outbound_duplicate_count_slider_->setValue(shared_count);
+                inbound_duplicate_count_slider_->setValue(shared_count);
+            }
+        }
+        else
+        {
+            duplicate_slider_->setValue(outbound_duplicate_slider_->value());
+            if (duplicate_custom_count_checkbox_->isChecked())
+            {
+                duplicate_count_slider_->setValue(outbound_duplicate_count_slider_->value());
+            }
+        }
+
+        duplicate_slider_->setEnabled(!checked);
+        duplicate_spinbox_->setEnabled(!checked);
+        duplicate_asymmetric_controls_->setVisible(checked);
+        update_duplicate_copy_controls_visibility();
+    });
+
+    update_duplicate_copy_controls_visibility();
 
     auto connect_hotkey_edit = [this](HotkeyEdit* edit, HotkeyAction action)
     {

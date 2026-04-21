@@ -32,6 +32,8 @@ enum class Counter : uint8_t
     kPacketsDroppedInbound,
     kPacketsDelayedOutbound,
     kPacketsDelayedInbound,
+    kPacketsDuplicatedOutbound,
+    kPacketsDuplicatedInbound,
     kPoolExhausted,
     kPacketsOversized,
     kReinjectFailures,

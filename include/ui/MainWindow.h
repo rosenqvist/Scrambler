@@ -93,6 +93,23 @@ private:  // NOLINT(readability-redundant-access-specifiers)
     QSpinBox* outbound_drop_spinbox_ = nullptr;
     QSlider* inbound_drop_slider_ = nullptr;
     QSpinBox* inbound_drop_spinbox_ = nullptr;
+    QSlider* duplicate_slider_ = nullptr;
+    QSpinBox* duplicate_spinbox_ = nullptr;
+    QCheckBox* duplicate_asymmetric_checkbox_ = nullptr;
+    QCheckBox* duplicate_custom_count_checkbox_ = nullptr;
+    QWidget* duplicate_asymmetric_controls_ = nullptr;
+    QWidget* duplicate_count_controls_ = nullptr;
+    QWidget* duplicate_count_asymmetric_controls_ = nullptr;
+    QSlider* outbound_duplicate_slider_ = nullptr;
+    QSpinBox* outbound_duplicate_spinbox_ = nullptr;
+    QSlider* inbound_duplicate_slider_ = nullptr;
+    QSpinBox* inbound_duplicate_spinbox_ = nullptr;
+    QSlider* duplicate_count_slider_ = nullptr;
+    QSpinBox* duplicate_count_spinbox_ = nullptr;
+    QSlider* outbound_duplicate_count_slider_ = nullptr;
+    QSpinBox* outbound_duplicate_count_spinbox_ = nullptr;
+    QSlider* inbound_duplicate_count_slider_ = nullptr;
+    QSpinBox* inbound_duplicate_count_spinbox_ = nullptr;
 
     // --- Hotkey controls ---
     HotkeyEdit* toggle_hotkey_edit_ = nullptr;

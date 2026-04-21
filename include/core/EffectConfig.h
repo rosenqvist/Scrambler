@@ -11,10 +11,15 @@
 namespace scrambler::core
 {
 
+inline constexpr int kDefaultDuplicateCopies = 1;
+inline constexpr int kMaxDuplicateCopies = 64;
+
 struct DirectionEffectSnapshot
 {
     std::chrono::milliseconds delay{0};
     float drop_rate = 0.0F;
+    float duplicate_rate = 0.0F;
+    int duplicate_count = kDefaultDuplicateCopies;
 };
 
 class DirectionEffectConfig
@@ -22,7 +27,10 @@ class DirectionEffectConfig
 public:
     [[nodiscard]] DirectionEffectSnapshot Snapshot() const
     {
-        return {.delay = std::chrono::milliseconds(DelayMs()), .drop_rate = DropRate()};
+        return {.delay = std::chrono::milliseconds(DelayMs()),
+                .drop_rate = DropRate(),
+                .duplicate_rate = DuplicateRate(),
+                .duplicate_count = DuplicateCount()};
     }
 
     [[nodiscard]] int DelayMs() const
@@ -37,7 +45,7 @@ public:
 
     void SetDelayMs(int delay_ms)
     {
-        delay_ms_.store((std::max)(delay_ms, 0), std::memory_order_relaxed);
+        delay_ms_.store((std::max) (delay_ms, 0), std::memory_order_relaxed);
     }
 
     [[nodiscard]] float DropRate() const
@@ -50,9 +58,32 @@ public:
         drop_rate_.store(std::clamp(drop_rate, 0.0F, 1.0F), std::memory_order_relaxed);
     }
 
+    [[nodiscard]] float DuplicateRate() const
+    {
+        return duplicate_rate_.load(std::memory_order_relaxed);
+    }
+
+    void SetDuplicateRate(float duplicate_rate)
+    {
+        duplicate_rate_.store(std::clamp(duplicate_rate, 0.0F, 1.0F), std::memory_order_relaxed);
+    }
+
+    [[nodiscard]] int DuplicateCount() const
+    {
+        return duplicate_count_.load(std::memory_order_relaxed);
+    }
+
+    void SetDuplicateCount(int duplicate_count)
+    {
+        duplicate_count_.store(std::clamp(duplicate_count, kDefaultDuplicateCopies, kMaxDuplicateCopies),
+                               std::memory_order_relaxed);
+    }
+
 private:
     std::atomic<int> delay_ms_{0};
     std::atomic<float> drop_rate_{0.0F};
+    std::atomic<float> duplicate_rate_{0.0F};
+    std::atomic<int> duplicate_count_{kDefaultDuplicateCopies};
 };
 
 struct EffectConfig
@@ -76,6 +107,16 @@ public:
         return Direction(is_outbound).DropRate();
     }
 
+    [[nodiscard]] float DuplicateRate(bool is_outbound) const
+    {
+        return Direction(is_outbound).DuplicateRate();
+    }
+
+    [[nodiscard]] int DuplicateCount(bool is_outbound) const
+    {
+        return Direction(is_outbound).DuplicateCount();
+    }
+
     void SetDelayMs(bool is_outbound, int delay_ms)
     {
         Direction(is_outbound).SetDelayMs(delay_ms);
@@ -84,6 +125,16 @@ public:
     void SetDropRate(bool is_outbound, float drop_rate)
     {
         Direction(is_outbound).SetDropRate(drop_rate);
+    }
+
+    void SetDuplicateRate(bool is_outbound, float duplicate_rate)
+    {
+        Direction(is_outbound).SetDuplicateRate(duplicate_rate);
+    }
+
+    void SetDuplicateCount(bool is_outbound, int duplicate_count)
+    {
+        Direction(is_outbound).SetDuplicateCount(duplicate_count);
     }
 
     [[nodiscard]] DirectionEffectConfig& Direction(bool is_outbound)
@@ -97,7 +148,7 @@ public:
     }
 };
 
-inline bool ShouldDrop(float rate, std::mt19937& rng)
+inline bool ShouldApplyRate(float rate, std::mt19937& rng)
 {
     if (rate <= 0.0F)
     {
@@ -112,10 +163,15 @@ inline bool ShouldDrop(float rate, std::mt19937& rng)
     return std::uniform_real_distribution<float>(0.0F, 1.0F)(rng) < rate;
 }
 
+inline bool ShouldDrop(float rate, std::mt19937& rng)
+{
+    return ShouldApplyRate(rate, rng);
+}
+
 inline bool ShouldDrop(float rate)
 {
     thread_local std::mt19937 rng{std::random_device{}()};
-    return ShouldDrop(rate, rng);
+    return ShouldApplyRate(rate, rng);
 }
 
 class TargetSet

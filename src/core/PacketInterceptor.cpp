@@ -128,18 +128,16 @@ void PacketInterceptor::CaptureLoop()
     // Batch config
     constexpr UINT kBatchSize = 128;  // Up to 128 packets per kernel transition
     constexpr UINT kRecvBufferLen = kBatchSize * kStandardMtuSize;
-    constexpr UINT kMaxImmediatePacketsPerInput =
-        static_cast<UINT>(PacketEffectEmission::kMaxImmediatePackets);
-    constexpr UINT kSendPacketCapacity = kBatchSize * kMaxImmediatePacketsPerInput;
-    constexpr UINT kSendBufferLen = kSendPacketCapacity * kStandardMtuSize;
 
     // Receive buffers
     std::vector<uint8_t> recv_buf(kRecvBufferLen);
     std::vector<WINDIVERT_ADDRESS> recv_addrs(kBatchSize);
 
     // Send buffers
-    std::vector<uint8_t> send_buf(kSendBufferLen);
-    std::vector<WINDIVERT_ADDRESS> send_addrs(kSendPacketCapacity);
+    std::vector<uint8_t> send_buf;
+    send_buf.reserve(kRecvBufferLen);
+    std::vector<WINDIVERT_ADDRESS> send_addrs;
+    send_addrs.reserve(kBatchSize);
 
     uint32_t consecutive_failures = 0;
 
@@ -188,8 +186,8 @@ void PacketInterceptor::CaptureLoop()
         uint8_t* current_pkt = recv_buf.data();
         UINT current_remaining = recv_len;
 
-        UINT send_len = 0;
-        UINT send_count = 0;
+        send_buf.clear();
+        send_addrs.clear();
 
         auto append_immediate_packet = [&](std::span<const uint8_t> packet_data, const WINDIVERT_ADDRESS& packet_addr)
         {
@@ -205,20 +203,10 @@ void PacketInterceptor::CaptureLoop()
                 return false;
             }
 
-            if (send_count >= kSendPacketCapacity || (send_len + packet_data.size()) > send_buf.size())
-            {
-                static std::atomic<uint64_t> occurrences{0};
-                LogRateLimited(occurrences,
-                               LogLevel::kWarn,
-                               "PacketInterceptor: immediate send buffer exhausted, dropping packet");
-                CountEvent(Counter::kPoolExhausted);
-                return false;
-            }
-
-            std::memcpy(send_buf.data() + send_len, packet_data.data(), packet_data.size());
-            send_addrs[send_count] = packet_addr;
-            send_len += static_cast<UINT>(packet_data.size());
-            ++send_count;
+            const auto previous_size = send_buf.size();
+            send_buf.resize(previous_size + packet_data.size());
+            std::memcpy(send_buf.data() + previous_size, packet_data.data(), packet_data.size());
+            send_addrs.push_back(packet_addr);
             return true;
         };
 
@@ -273,12 +261,13 @@ void PacketInterceptor::CaptureLoop()
                 {
                     const bool is_outbound = addr.Outbound != 0;
                     const auto now = std::chrono::steady_clock::now();
-                    auto owned_packet = OwnedPacket::CopyFrom(
-                        std::span(current_pkt, pkt_len), addr, {.tuple = tuple, .pid = pid, .is_outbound = is_outbound});
+                    auto owned_packet = OwnedPacket::CopyFrom(std::span(current_pkt, pkt_len),
+                                                              addr,
+                                                              {.tuple = tuple, .pid = pid, .is_outbound = is_outbound});
 
                     if (owned_packet)
                     {
-                        auto emission = effect_engine_.Process(std::move(*owned_packet), now);
+                        auto emission = effect_engine_.Process(*owned_packet, now);
 
                         if (emission.HasEffect(PacketEffectKind::kDrop))
                         {
@@ -292,16 +281,17 @@ void PacketInterceptor::CaptureLoop()
                                         tuple.dst_port,
                                         pkt_len);
 #endif
-                            CountEvent(is_outbound ? Counter::kPacketsDroppedOutbound : Counter::kPacketsDroppedInbound);
+                            CountEvent(is_outbound ? Counter::kPacketsDroppedOutbound
+                                                   : Counter::kPacketsDroppedInbound);
                         }
 
-                        if (emission.HasEffect(PacketEffectKind::kDelay) && emission.scheduled_count > 0)
+                        if (emission.HasEffect(PacketEffectKind::kDelay) && emission.ScheduledCount() > 0)
                         {
 #ifndef NDEBUG
                             const auto scheduled_delay =
-                                (std::max)(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                               emission.scheduled_packets[0].release_at - now),
-                                           std::chrono::milliseconds::zero());
+                                (std::max) (std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                emission.scheduled_packets.front().release_at - now),
+                                            std::chrono::milliseconds::zero());
                             auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
                             DEBUG_PRINT("[DELAY] PID {:>5} | {}:{} -> {}:{} ({} bytes) +{}ms",
                                         pid,
@@ -316,15 +306,33 @@ void PacketInterceptor::CaptureLoop()
                                                    : Counter::kPacketsDelayedInbound);
                         }
 
-                        for (size_t immediate_index = 0; immediate_index < emission.immediate_count; ++immediate_index)
+                        if (emission.HasEffect(PacketEffectKind::kDuplicate))
                         {
-                            append_immediate_packet(emission.immediate_packets[immediate_index].Bytes(),
-                                                    emission.immediate_packets[immediate_index].addr);
+#ifndef NDEBUG
+                            auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
+                            DEBUG_PRINT("[DUPL]  PID {:>5} | {}:{} -> {}:{} ({} bytes) x{}",
+                                        pid,
+                                        addrs.src.data(),
+                                        tuple.src_port,
+                                        addrs.dst.data(),
+                                        tuple.dst_port,
+                                        pkt_len,
+                                        emission.TotalEmittedCount());
+#endif
+                            const auto duplicate_count = emission.TotalEmittedCount() - 1U;
+                            CountEvent(is_outbound ? Counter::kPacketsDuplicatedOutbound
+                                                   : Counter::kPacketsDuplicatedInbound,
+                                       duplicate_count);
                         }
 
-                        for (size_t scheduled_index = 0; scheduled_index < emission.scheduled_count; ++scheduled_index)
+                        for (const auto& immediate_packet : emission.immediate_packets)
                         {
-                            delay_queue_->Push(std::move(emission.scheduled_packets[scheduled_index]));
+                            append_immediate_packet(immediate_packet.Bytes(), immediate_packet.addr);
+                        }
+
+                        for (auto& scheduled_packet : emission.scheduled_packets)
+                        {
+                            delay_queue_->Push(scheduled_packet);
                         }
 
                         handled = true;
@@ -349,15 +357,15 @@ void PacketInterceptor::CaptureLoop()
         }
 
         // Reinject all untouched packets in a single kernel call
-        if (send_count > 0)
+        if (!send_addrs.empty())
         {
             if (WinDivertSendEx(handle_,
                                 send_buf.data(),
-                                send_len,
+                                static_cast<UINT>(send_buf.size()),
                                 nullptr,
                                 0,
                                 send_addrs.data(),
-                                send_count * sizeof(WINDIVERT_ADDRESS),
+                                static_cast<UINT>(send_addrs.size() * sizeof(WINDIVERT_ADDRESS)),
                                 nullptr)
                 == 0)
             {
@@ -366,12 +374,12 @@ void PacketInterceptor::CaptureLoop()
                                LogLevel::kWarn,
                                "PacketInterceptor: batch WinDivertSendEx failed (GLE={}, packets={})",
                                GetLastError(),
-                               send_count);
-                CountEvent(Counter::kReinjectFailures, send_count);
+                               send_addrs.size());
+                CountEvent(Counter::kReinjectFailures, static_cast<uint64_t>(send_addrs.size()));
             }
             else
             {
-                CountEvent(Counter::kPacketsReinjected, send_count);
+                CountEvent(Counter::kPacketsReinjected, static_cast<uint64_t>(send_addrs.size()));
             }
         }
     }

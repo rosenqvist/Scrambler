@@ -109,6 +109,7 @@ void DiagnosticsTab::SetupUi()
     add_row(row++, "Packets reinjected", packets_reinjected_value_);
     add_row(row++, "Packets dropped", packets_dropped_value_);
     add_row(row++, "Packets delayed", packets_delayed_value_);
+    add_row(row++, "Packets duplicated", packets_duplicated_value_);
     add_row(row++, "Pool exhausted", pool_exhausted_value_);
     add_row(row++, "Packets oversized", packets_oversized_value_);
     add_row(row++, "Reinject failures", reinject_failures_value_);
@@ -180,6 +181,9 @@ void DiagnosticsTab::RefreshCounters()
     set_directional(packets_delayed_value_,
                     d.Get(core::Counter::kPacketsDelayedOutbound),
                     d.Get(core::Counter::kPacketsDelayedInbound));
+    set_directional(packets_duplicated_value_,
+                    d.Get(core::Counter::kPacketsDuplicatedOutbound),
+                    d.Get(core::Counter::kPacketsDuplicatedInbound));
     set(pool_exhausted_value_, d.Get(core::Counter::kPoolExhausted), true);
     set(packets_oversized_value_, d.Get(core::Counter::kPacketsOversized), true);
     set(reinject_failures_value_, d.Get(core::Counter::kReinjectFailures), true);

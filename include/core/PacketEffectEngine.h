@@ -3,10 +3,10 @@
 #include "core/EffectConfig.h"
 #include "core/PacketData.h"
 
-#include <array>
 #include <chrono>
 #include <cstdint>
 #include <random>
+#include <vector>
 
 namespace scrambler::core
 {
@@ -31,19 +31,17 @@ using PacketEffectMask = std::uint8_t;
 
 struct PacketEffectEmission
 {
-    static constexpr size_t kMaxImmediatePackets = 4;
-    static constexpr size_t kMaxScheduledPackets = 4;
-
     PacketEffectMask applied_effects = 0;
-    size_t immediate_count = 0;
-    size_t scheduled_count = 0;
-    std::array<OwnedPacket, kMaxImmediatePackets> immediate_packets{};
-    std::array<ScheduledPacket, kMaxScheduledPackets> scheduled_packets{};
+    std::vector<OwnedPacket> immediate_packets;
+    std::vector<ScheduledPacket> scheduled_packets;
 
-    bool AddImmediate(OwnedPacket packet);
-    bool AddScheduled(OwnedPacket packet, std::chrono::steady_clock::time_point release_at);
+    void AddImmediate(OwnedPacket packet);
+    void AddScheduled(OwnedPacket packet, std::chrono::steady_clock::time_point release_at);
 
     [[nodiscard]] bool HasEffect(PacketEffectKind kind) const;
+    [[nodiscard]] size_t ImmediateCount() const;
+    [[nodiscard]] size_t ScheduledCount() const;
+    [[nodiscard]] size_t TotalEmittedCount() const;
 };
 
 class DirectionPacketEffectEngine

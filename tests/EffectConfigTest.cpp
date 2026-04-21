@@ -4,6 +4,8 @@
 
 using scrambler::core::EffectConfig;
 using scrambler::core::ShouldDrop;
+using scrambler::core::kDefaultDuplicateCopies;
+using scrambler::core::kMaxDuplicateCopies;
 
 //  Delays
 
@@ -47,6 +49,22 @@ TEST(EffectConfigTest, DefaultDropRateIsZero)
 
     EXPECT_FLOAT_EQ(effects.DropRate(true), 0.0F);
     EXPECT_FLOAT_EQ(effects.DropRate(false), 0.0F);
+}
+
+TEST(EffectConfigTest, DefaultDuplicateRateIsZero)
+{
+    EffectConfig effects;
+
+    EXPECT_FLOAT_EQ(effects.DuplicateRate(true), 0.0F);
+    EXPECT_FLOAT_EQ(effects.DuplicateRate(false), 0.0F);
+}
+
+TEST(EffectConfigTest, DefaultDuplicateCountIsOneExtraCopy)
+{
+    EffectConfig effects;
+
+    EXPECT_EQ(effects.DuplicateCount(true), kDefaultDuplicateCopies);
+    EXPECT_EQ(effects.DuplicateCount(false), kDefaultDuplicateCopies);
 }
 
 TEST(EffectConfigTest, ZeroDropRateNeverDrops)
@@ -119,6 +137,36 @@ TEST(EffectConfigTest, DropRatesCanDifferByDirection)
     EXPECT_FLOAT_EQ(effects.DropRate(false), 0.75F);
 }
 
+TEST(EffectConfigTest, DuplicateRatesCanDifferByDirection)
+{
+    EffectConfig effects;
+    effects.SetDuplicateRate(true, 0.20F);
+    effects.SetDuplicateRate(false, 0.60F);
+
+    EXPECT_FLOAT_EQ(effects.DuplicateRate(true), 0.20F);
+    EXPECT_FLOAT_EQ(effects.DuplicateRate(false), 0.60F);
+}
+
+TEST(EffectConfigTest, DuplicateCountsCanDifferByDirection)
+{
+    EffectConfig effects;
+    effects.SetDuplicateCount(true, 3);
+    effects.SetDuplicateCount(false, 7);
+
+    EXPECT_EQ(effects.DuplicateCount(true), 3);
+    EXPECT_EQ(effects.DuplicateCount(false), 7);
+}
+
+TEST(EffectConfigTest, DuplicateCountIsClampedToSupportedMaximum)
+{
+    EffectConfig effects;
+    effects.SetDuplicateCount(true, kMaxDuplicateCopies + 10);
+    effects.SetDuplicateCount(false, 0);
+
+    EXPECT_EQ(effects.DuplicateCount(true), kMaxDuplicateCopies);
+    EXPECT_EQ(effects.DuplicateCount(false), kDefaultDuplicateCopies);
+}
+
 TEST(EffectConfigTest, DelaysCanDifferByDirection)
 {
     EffectConfig effects;
@@ -143,6 +191,32 @@ TEST(EffectConfigTest, DelayAndDropValuesAreIndependentByDirection)
     EXPECT_FLOAT_EQ(effects.DropRate(false), 0.35F);
 }
 
+TEST(EffectConfigTest, DelayDropAndDuplicateValuesAreIndependentByDirection)
+{
+    EffectConfig effects;
+    effects.SetDelayMs(true, 80);
+    effects.SetDelayMs(false, 260);
+    effects.SetDropRate(true, 0.10F);
+    effects.SetDropRate(false, 0.35F);
+    effects.SetDuplicateRate(true, 0.15F);
+    effects.SetDuplicateRate(false, 0.45F);
+    effects.SetDuplicateCount(true, 2);
+    effects.SetDuplicateCount(false, 5);
+
+    EXPECT_EQ(effects.Delay(true).count(), 80);
+    EXPECT_EQ(effects.Delay(false).count(), 260);
+    EXPECT_FLOAT_EQ(effects.DropRate(true), 0.10F);
+    EXPECT_FLOAT_EQ(effects.DropRate(false), 0.35F);
+    EXPECT_FLOAT_EQ(effects.DuplicateRate(true), 0.15F);
+    EXPECT_FLOAT_EQ(effects.DuplicateRate(false), 0.45F);
+    EXPECT_EQ(effects.DuplicateCount(true), 2);
+    EXPECT_EQ(effects.DuplicateCount(false), 5);
+    EXPECT_FLOAT_EQ(effects.Snapshot(true).duplicate_rate, 0.15F);
+    EXPECT_FLOAT_EQ(effects.Snapshot(false).duplicate_rate, 0.45F);
+    EXPECT_EQ(effects.Snapshot(true).duplicate_count, 2);
+    EXPECT_EQ(effects.Snapshot(false).duplicate_count, 5);
+}
+
 // Default State
 TEST(EffectConfigTest, DefaultsAreInert)
 {
@@ -152,6 +226,10 @@ TEST(EffectConfigTest, DefaultsAreInert)
     EXPECT_EQ(effects.Direction(false).DelayMs(), 0);
     EXPECT_EQ(effects.Direction(true).DropRate(), 0.0F);
     EXPECT_EQ(effects.Direction(false).DropRate(), 0.0F);
+    EXPECT_EQ(effects.Direction(true).DuplicateRate(), 0.0F);
+    EXPECT_EQ(effects.Direction(false).DuplicateRate(), 0.0F);
+    EXPECT_EQ(effects.Direction(true).DuplicateCount(), kDefaultDuplicateCopies);
+    EXPECT_EQ(effects.Direction(false).DuplicateCount(), kDefaultDuplicateCopies);
     EXPECT_EQ(effects.Delay(true).count(), 0);
     EXPECT_EQ(effects.Delay(false).count(), 0);
     EXPECT_FALSE(ShouldDrop(effects.DropRate(true)));
