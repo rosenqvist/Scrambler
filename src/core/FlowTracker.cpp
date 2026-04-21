@@ -129,9 +129,10 @@ void FlowTracker::BootstrapFromSystem()
     std::unordered_map<uint64_t, uint32_t> snapshot;
     ForEachUdpEntry([&](uint32_t local_addr, uint16_t port, uint32_t pid)
     {
-        // Include noise PIDs like System. The NETWORK-layer filter still
-        // skips them, but now via a cheap cache hit instead of a kernel scan.
-        snapshot[MakeEndpointKey(local_addr, port)] = pid;
+        if (!IsNoisePid(pid))
+        {
+            snapshot[MakeEndpointKey(local_addr, port)] = pid;
+        }
     });
 
     const size_t count = snapshot.size();
@@ -222,16 +223,15 @@ uint32_t FlowTracker::LookupPid(const FiveTuple& tuple, bool is_outbound)
     const uint32_t local_addr = is_outbound ? tuple.src_addr : tuple.dst_addr;
     const uint16_t local_port = is_outbound ? tuple.src_port : tuple.dst_port;
     auto pid = LookupPidFromSystem(local_addr, local_port);
-
-    InsertFlow(tuple, pid);
+    if (pid != 0)
+    {
+        InsertFlow(tuple, pid);
+    }
 
     return pid;
 }
 
 // Inserts or overwrites both directions of a flow mapping.
-// LookupPid() caches a PID of 0 (meaning "nothing we care about") here to
-// avoid repeated GetExtendedUdpTable() calls. A later FLOW-layer event for
-// the same tuple will overwrite the 0 with the real PID so the cache regenerates.
 void FlowTracker::InsertFlow(const FiveTuple& tuple, uint32_t pid)
 {
     // Store both directions so packet lookups match regardless of direction
@@ -242,9 +242,11 @@ void FlowTracker::InsertFlow(const FiveTuple& tuple, uint32_t pid)
 
 void FlowTracker::OnFlowEstablished(const FiveTuple& tuple, uint32_t pid)
 {
-    // Insert unconditionally, noise PIDs included. The NETWORK-layer target
-    // filter still ignores them, but now they fall through as a cache hit
-    // instead of forcing a kernel scan on their first packet.
+    if (IsNoisePid(pid))
+    {
+        return;
+    }
+
     {
         std::unique_lock lock(mutex_);
         flow_table_[tuple] = pid;
