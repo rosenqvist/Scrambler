@@ -363,8 +363,8 @@ void MainWindow::SetupUi()
             this,
             [this, sync_slider_value](int value)
     {
-        effects_.outbound_delay_ms.store(value);
-        effects_.inbound_delay_ms.store(value);
+        effects_.SetDelayMs(true, value);
+        effects_.SetDelayMs(false, value);
         sync_slider_value(outbound_delay_slider_, value);
         sync_slider_value(inbound_delay_slider_, value);
     });
@@ -375,8 +375,8 @@ void MainWindow::SetupUi()
             [this, sync_slider_value](int value)
     {
         const float rate = static_cast<float>(value) / 100.0F;
-        effects_.outbound_drop_rate.store(rate);
-        effects_.inbound_drop_rate.store(rate);
+        effects_.SetDropRate(true, rate);
+        effects_.SetDropRate(false, rate);
         sync_slider_value(outbound_drop_slider_, value);
         sync_slider_value(inbound_drop_slider_, value);
     });
@@ -386,7 +386,7 @@ void MainWindow::SetupUi()
             this,
             [this](int value)
     {
-        effects_.outbound_delay_ms.store(value);
+        effects_.SetDelayMs(true, value);
     });
 
     connect(inbound_delay_slider_,
@@ -394,7 +394,7 @@ void MainWindow::SetupUi()
             this,
             [this](int value)
     {
-        effects_.inbound_delay_ms.store(value);
+        effects_.SetDelayMs(false, value);
     });
 
     connect(outbound_drop_slider_,
@@ -402,7 +402,7 @@ void MainWindow::SetupUi()
             this,
             [this](int value)
     {
-        effects_.outbound_drop_rate.store(static_cast<float>(value) / 100.0F);
+        effects_.SetDropRate(true, static_cast<float>(value) / 100.0F);
     });
 
     connect(inbound_drop_slider_,
@@ -410,7 +410,7 @@ void MainWindow::SetupUi()
             this,
             [this](int value)
     {
-        effects_.inbound_drop_rate.store(static_cast<float>(value) / 100.0F);
+        effects_.SetDropRate(false, static_cast<float>(value) / 100.0F);
     });
 
     connect(delay_asymmetric_checkbox_,

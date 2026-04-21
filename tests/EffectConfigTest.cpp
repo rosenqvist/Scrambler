@@ -18,8 +18,8 @@ TEST(EffectConfigTest, DefaultDelayIsZero)
 TEST(EffectConfigTest, DelayReflectsStoredValue)
 {
     EffectConfig effects;
-    effects.outbound_delay_ms.store(150);
-    effects.inbound_delay_ms.store(275);
+    effects.SetDelayMs(true, 150);
+    effects.SetDelayMs(false, 275);
 
     EXPECT_EQ(effects.Delay(true).count(), 150);
     EXPECT_EQ(effects.Delay(false).count(), 275);
@@ -28,13 +28,13 @@ TEST(EffectConfigTest, DelayReflectsStoredValue)
 TEST(EffectConfigTest, DelayCanBeUpdatedAtRuntime)
 {
     EffectConfig effects;
-    effects.outbound_delay_ms.store(100);
-    effects.inbound_delay_ms.store(200);
+    effects.SetDelayMs(true, 100);
+    effects.SetDelayMs(false, 200);
     EXPECT_EQ(effects.Delay(true).count(), 100);
     EXPECT_EQ(effects.Delay(false).count(), 200);
 
-    effects.outbound_delay_ms.store(500);
-    effects.inbound_delay_ms.store(350);
+    effects.SetDelayMs(true, 500);
+    effects.SetDelayMs(false, 350);
     EXPECT_EQ(effects.Delay(true).count(), 500);
     EXPECT_EQ(effects.Delay(false).count(), 350);
 }
@@ -112,8 +112,8 @@ TEST(EffectConfigTest, TenPercentDropRateIsRoughlyTenPercent)
 TEST(EffectConfigTest, DropRatesCanDifferByDirection)
 {
     EffectConfig effects;
-    effects.outbound_drop_rate.store(0.25F);
-    effects.inbound_drop_rate.store(0.75F);
+    effects.SetDropRate(true, 0.25F);
+    effects.SetDropRate(false, 0.75F);
 
     EXPECT_FLOAT_EQ(effects.DropRate(true), 0.25F);
     EXPECT_FLOAT_EQ(effects.DropRate(false), 0.75F);
@@ -122,8 +122,8 @@ TEST(EffectConfigTest, DropRatesCanDifferByDirection)
 TEST(EffectConfigTest, DelaysCanDifferByDirection)
 {
     EffectConfig effects;
-    effects.outbound_delay_ms.store(120);
-    effects.inbound_delay_ms.store(480);
+    effects.SetDelayMs(true, 120);
+    effects.SetDelayMs(false, 480);
 
     EXPECT_EQ(effects.Delay(true).count(), 120);
     EXPECT_EQ(effects.Delay(false).count(), 480);
@@ -132,10 +132,10 @@ TEST(EffectConfigTest, DelaysCanDifferByDirection)
 TEST(EffectConfigTest, DelayAndDropValuesAreIndependentByDirection)
 {
     EffectConfig effects;
-    effects.outbound_delay_ms.store(80);
-    effects.inbound_delay_ms.store(260);
-    effects.outbound_drop_rate.store(0.10F);
-    effects.inbound_drop_rate.store(0.35F);
+    effects.SetDelayMs(true, 80);
+    effects.SetDelayMs(false, 260);
+    effects.SetDropRate(true, 0.10F);
+    effects.SetDropRate(false, 0.35F);
 
     EXPECT_EQ(effects.Delay(true).count(), 80);
     EXPECT_EQ(effects.Delay(false).count(), 260);
@@ -148,10 +148,10 @@ TEST(EffectConfigTest, DefaultsAreInert)
 {
     EffectConfig effects;
 
-    EXPECT_EQ(effects.outbound_delay_ms.load(), 0);
-    EXPECT_EQ(effects.inbound_delay_ms.load(), 0);
-    EXPECT_EQ(effects.outbound_drop_rate.load(), 0.0F);
-    EXPECT_EQ(effects.inbound_drop_rate.load(), 0.0F);
+    EXPECT_EQ(effects.Direction(true).DelayMs(), 0);
+    EXPECT_EQ(effects.Direction(false).DelayMs(), 0);
+    EXPECT_EQ(effects.Direction(true).DropRate(), 0.0F);
+    EXPECT_EQ(effects.Direction(false).DropRate(), 0.0F);
     EXPECT_EQ(effects.Delay(true).count(), 0);
     EXPECT_EQ(effects.Delay(false).count(), 0);
     EXPECT_FALSE(ShouldDrop(effects.DropRate(true)));

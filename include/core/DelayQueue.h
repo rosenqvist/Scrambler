@@ -1,43 +1,17 @@
 #pragma once
 
-#include "core/Types.h"
+#include "core/PacketData.h"
+#include "core/ScheduledPacketQueue.h"
 #include "rigtorp/SPSCQueue.h"
 
-#include <queue>
-
-#include <array>
 #include <atomic>
-#include <chrono>
-#include <span>
 #include <thread>
 #include <vector>
 
 namespace scrambler::core
 {
 
-// This struct holds all the info we need to store a packet while it waits for its delay to expire.
-// It keeps a copy of the packet data, its length and its routing address so we can inject it later.
-struct DelayedPacket
-{
-    std::array<uint8_t, kStandardMtuSize> data{};
-    UINT length = 0;
-    WINDIVERT_ADDRESS addr{};
-    std::chrono::steady_clock::time_point release_at;
-
-    DelayedPacket() = default;
-};
-
-// We need this struct so our priority queue knows how to sort the packet pointers.
-// It tells the queue to automatically bubble the packet with the earliest release time to the top.
-struct CompareDelayedPacketPtr
-{
-    bool operator()(const DelayedPacket* a, const DelayedPacket* b) const
-    {
-        return a->release_at > b->release_at;
-    }
-};
-
-// The DelayQueue class acts as a holding area for delayed packets.
+// The DelayQueue class acts as a scheduled reinjection queue for packets that should not be sent immediately.
 // It safely takes packets from the fast interceptor thread and sorts them by their target release time and injects them
 // back into the network.
 class DelayQueue
@@ -56,30 +30,29 @@ public:
     void Start();
     void Stop();
 
-    // This is the only function the main capture loop calls. It simply drops a packet in the handoff queue.
-    void Push(std::span<const uint8_t> packet_data, const WINDIVERT_ADDRESS& addr, std::chrono::milliseconds delay);
+    // This is the only function the main capture loop calls. It enqueues an
+    // already-owned packet for a future reinjection time.
+    void Push(ScheduledPacket packet);
 
 private:
     // This is the background loop that constantly checks if any packets are ready to be sent.
     void DrainLoop();
-    void Reinject(const DelayedPacket* pkt);
+    void Reinject(const ScheduledPacket& pkt);
 
     // This cleans up and releases any leftover packets when the application closes down.
     void FlushPackets();
 
     HANDLE divert_handle_;
 
-    std::vector<DelayedPacket> memory_pool_;
+    std::vector<ScheduledPacket> memory_pool_;
 
-    rigtorp::SPSCQueue<DelayedPacket*> free_queue_;
+    rigtorp::SPSCQueue<ScheduledPacket*> free_queue_;
 
     // This is rigtorps ultra fast lock-free queue, used alot in HFT. It's pretty overkill, but hey why not.
     // It acts as a fast bridge between the thread capturing packets and the background drain thread.
     // Because it is lock-free it stops the main capture loop from ever getting stuck.
-    rigtorp::SPSCQueue<DelayedPacket*> handoff_queue_;
-
-    // This is where packets wait until their delay timer runs out.
-    std::priority_queue<DelayedPacket*, std::vector<DelayedPacket*>, CompareDelayedPacketPtr> priority_queue_;
+    rigtorp::SPSCQueue<ScheduledPacket*> handoff_queue_;
+    ScheduledPacketQueue scheduled_packets_;
 
     std::jthread thread_;
 

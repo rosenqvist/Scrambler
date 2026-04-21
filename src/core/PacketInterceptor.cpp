@@ -2,14 +2,16 @@
 
 #include "core/Diagnostics.h"
 
+#include <algorithm>
 #include <array>
 #include <span>
+#include <utility>
 
 namespace scrambler::core
 {
 
 PacketInterceptor::PacketInterceptor(FlowTracker& flow_tracker, const TargetSet& targets, const EffectConfig& effects)
-    : flow_tracker_(flow_tracker), targets_(targets), effects_(effects)
+    : flow_tracker_(flow_tracker), targets_(targets), effect_engine_(effects)
 {
 }
 
@@ -119,21 +121,25 @@ bool PacketInterceptor::IsRunning() const
 // Main packet processing pipeline:
 // 1. Capture a UDP packet
 // 2. Parse headers and look up which process owns it
-// 3. If it belongs to a targeted PID we apply effects (drop or delay)
+// 3. If it belongs to a targeted PID we run it through the effect engine
 // 4. Otherwise reinject immediately so non targeted traffic is unaffected
 void PacketInterceptor::CaptureLoop()
 {
     // Batch config
     constexpr UINT kBatchSize = 128;  // Up to 128 packets per kernel transition
-    constexpr UINT kBatchBufferLen = kBatchSize * kStandardMtuSize;
+    constexpr UINT kRecvBufferLen = kBatchSize * kStandardMtuSize;
+    constexpr UINT kMaxImmediatePacketsPerInput =
+        static_cast<UINT>(PacketEffectEmission::kMaxImmediatePackets);
+    constexpr UINT kSendPacketCapacity = kBatchSize * kMaxImmediatePacketsPerInput;
+    constexpr UINT kSendBufferLen = kSendPacketCapacity * kStandardMtuSize;
 
     // Receive buffers
-    std::vector<uint8_t> recv_buf(kBatchBufferLen);
+    std::vector<uint8_t> recv_buf(kRecvBufferLen);
     std::vector<WINDIVERT_ADDRESS> recv_addrs(kBatchSize);
 
-    // Send (Repack) buffers
-    std::vector<uint8_t> send_buf(kBatchBufferLen);
-    std::vector<WINDIVERT_ADDRESS> send_addrs(kBatchSize);
+    // Send buffers
+    std::vector<uint8_t> send_buf(kSendBufferLen);
+    std::vector<WINDIVERT_ADDRESS> send_addrs(kSendPacketCapacity);
 
     uint32_t consecutive_failures = 0;
 
@@ -144,7 +150,7 @@ void PacketInterceptor::CaptureLoop()
 
         // We can capture about 128 packets in a single kernel call
         if (WinDivertRecvEx(
-                handle_, recv_buf.data(), kBatchBufferLen, &recv_len, 0, recv_addrs.data(), &addr_len, nullptr)
+                handle_, recv_buf.data(), kRecvBufferLen, &recv_len, 0, recv_addrs.data(), &addr_len, nullptr)
             == 0)
         {
             const DWORD gle = GetLastError();
@@ -185,6 +191,37 @@ void PacketInterceptor::CaptureLoop()
         UINT send_len = 0;
         UINT send_count = 0;
 
+        auto append_immediate_packet = [&](std::span<const uint8_t> packet_data, const WINDIVERT_ADDRESS& packet_addr)
+        {
+            if (packet_data.size() > kStandardMtuSize)
+            {
+                static std::atomic<uint64_t> occurrences{0};
+                LogRateLimited(occurrences,
+                               LogLevel::kWarn,
+                               "PacketInterceptor: dropping oversized packet ({} bytes > {} MTU)",
+                               packet_data.size(),
+                               kStandardMtuSize);
+                CountEvent(Counter::kPacketsOversized);
+                return false;
+            }
+
+            if (send_count >= kSendPacketCapacity || (send_len + packet_data.size()) > send_buf.size())
+            {
+                static std::atomic<uint64_t> occurrences{0};
+                LogRateLimited(occurrences,
+                               LogLevel::kWarn,
+                               "PacketInterceptor: immediate send buffer exhausted, dropping packet");
+                CountEvent(Counter::kPoolExhausted);
+                return false;
+            }
+
+            std::memcpy(send_buf.data() + send_len, packet_data.data(), packet_data.size());
+            send_addrs[send_count] = packet_addr;
+            send_len += static_cast<UINT>(packet_data.size());
+            ++send_count;
+            return true;
+        };
+
         // Walk through the batched buffer
         for (UINT i = 0; i < num_packets; ++i)
         {
@@ -223,7 +260,7 @@ void PacketInterceptor::CaptureLoop()
                 break;
             }
 
-            UINT pkt_len = current_remaining - next_len;
+            const UINT pkt_len = current_remaining - next_len;
             bool handled = false;
 
             // Process the individual packet
@@ -234,32 +271,37 @@ void PacketInterceptor::CaptureLoop()
 
                 if (pid != 0 && targets_.Contains(pid))
                 {
-                    bool is_outbound = addr.Outbound != 0;
-                    const float drop_rate = effects_.DropRate(is_outbound);
-                    const auto delay = effects_.Delay(is_outbound);
+                    const bool is_outbound = addr.Outbound != 0;
+                    const auto now = std::chrono::steady_clock::now();
+                    auto owned_packet = OwnedPacket::CopyFrom(
+                        std::span(current_pkt, pkt_len), addr, {.tuple = tuple, .pid = pid, .is_outbound = is_outbound});
 
-                    // Apply Drop Effect
-                    if (ShouldDrop(drop_rate))
+                    if (owned_packet)
                     {
-#ifndef NDEBUG
-                        auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
-                        DEBUG_PRINT("[DROP]  PID {:>5} | {}:{} -> {}:{} ({} bytes)",
-                                    pid,
-                                    addrs.src.data(),
-                                    tuple.src_port,
-                                    addrs.dst.data(),
-                                    tuple.dst_port,
-                                    pkt_len);
-#endif
-                        CountEvent(is_outbound ? Counter::kPacketsDroppedOutbound : Counter::kPacketsDroppedInbound);
-                        handled = true;
-                    }
-                    // Apply Delay Effect
-                    else
-                    {
-                        if (delay.count() > 0)
+                        auto emission = effect_engine_.Process(std::move(*owned_packet), now);
+
+                        if (emission.HasEffect(PacketEffectKind::kDrop))
                         {
 #ifndef NDEBUG
+                            auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
+                            DEBUG_PRINT("[DROP]  PID {:>5} | {}:{} -> {}:{} ({} bytes)",
+                                        pid,
+                                        addrs.src.data(),
+                                        tuple.src_port,
+                                        addrs.dst.data(),
+                                        tuple.dst_port,
+                                        pkt_len);
+#endif
+                            CountEvent(is_outbound ? Counter::kPacketsDroppedOutbound : Counter::kPacketsDroppedInbound);
+                        }
+
+                        if (emission.HasEffect(PacketEffectKind::kDelay) && emission.scheduled_count > 0)
+                        {
+#ifndef NDEBUG
+                            const auto scheduled_delay =
+                                (std::max)(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                               emission.scheduled_packets[0].release_at - now),
+                                           std::chrono::milliseconds::zero());
                             auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
                             DEBUG_PRINT("[DELAY] PID {:>5} | {}:{} -> {}:{} ({} bytes) +{}ms",
                                         pid,
@@ -268,26 +310,32 @@ void PacketInterceptor::CaptureLoop()
                                         addrs.dst.data(),
                                         tuple.dst_port,
                                         pkt_len,
-                                        delay.count());
+                                        scheduled_delay.count());
 #endif
                             CountEvent(is_outbound ? Counter::kPacketsDelayedOutbound
                                                    : Counter::kPacketsDelayedInbound);
-                            delay_queue_->Push(std::span(current_pkt, pkt_len), addr, delay);
-                            handled = true;
                         }
+
+                        for (size_t immediate_index = 0; immediate_index < emission.immediate_count; ++immediate_index)
+                        {
+                            append_immediate_packet(emission.immediate_packets[immediate_index].Bytes(),
+                                                    emission.immediate_packets[immediate_index].addr);
+                        }
+
+                        for (size_t scheduled_index = 0; scheduled_index < emission.scheduled_count; ++scheduled_index)
+                        {
+                            delay_queue_->Push(std::move(emission.scheduled_packets[scheduled_index]));
+                        }
+
+                        handled = true;
                     }
                 }
             }
 
-            // Repack non-targeted packets for bulk reinjection
+            // Repack packets that should continue through the fast path immediately.
             if (!handled)
             {
-                // A fast user-space memory copy is immensely faster than multiple kernel transitions
-                std::memcpy(send_buf.data() + send_len, current_pkt, pkt_len);
-                send_addrs[send_count] = addr;
-
-                send_len += pkt_len;
-                send_count++;
+                append_immediate_packet(std::span(current_pkt, pkt_len), addr);
             }
 
             // Advance pointers to the next packet in the batch

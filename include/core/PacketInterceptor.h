@@ -2,6 +2,7 @@
 
 #include "core/DelayQueue.h"
 #include "core/EffectConfig.h"
+#include "core/PacketEffectEngine.h"
 #include "core/FlowTracker.h"
 #include "core/StartupError.h"
 
@@ -38,12 +39,11 @@ public:
 
 private:
     void CaptureLoop();
-    void Reinject(const uint8_t* data, UINT len, const WINDIVERT_ADDRESS& addr);
     void NotifyFatal(uint32_t gle);
 
     FlowTracker& flow_tracker_;
     const TargetSet& targets_;
-    const EffectConfig& effects_;
+    PacketEffectEngine effect_engine_;
     std::unique_ptr<DelayQueue> delay_queue_;
     std::jthread thread_;
     std::atomic<bool> running_{false};

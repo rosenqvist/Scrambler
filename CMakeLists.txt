@@ -66,6 +66,7 @@ add_executable(scrambler
     src/main.cpp
     src/core/FlowTracker.cpp
     src/core/PacketInterceptor.cpp
+    src/core/PacketEffectEngine.cpp
     src/core/DelayQueue.cpp
     src/ui/MainWindow.cpp
     src/ui/HotkeyManager.cpp
@@ -165,7 +166,10 @@ if (SCRAMBLER_ENABLE_TESTS)
         tests/FiveTupleTest.cpp
         tests/TargetSetTest.cpp
         tests/EffectConfigTest.cpp
+        tests/PacketEffectEngineTest.cpp
+        tests/ScheduledPacketQueueTest.cpp
         tests/ProcessEnumeratorTest.cpp
+        src/core/PacketEffectEngine.cpp
         src/platform/ProcessEnumerator.cpp
     )
 
