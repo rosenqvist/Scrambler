@@ -281,44 +281,49 @@ HotkeyBinding HotkeyManager::GetBinding(HotkeyAction action) const
 
 void HotkeyManager::RegisterAll()
 {
-    if (registered_)
-    {
-        UnregisterAll();
-    }
+    UnregisterAll();
 
     HHOOK kb = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardHookProc, GetModuleHandle(nullptr), 0);
+    const DWORD kb_error = (kb == nullptr) ? GetLastError() : ERROR_SUCCESS;
     HHOOK mouse = SetWindowsHookEx(WH_MOUSE_LL, MouseHookProc, GetModuleHandle(nullptr), 0);
-
-    keyboard_hook.store(kb, std::memory_order_release);
-    mouse_hook.store(mouse, std::memory_order_release);
+    const DWORD mouse_error = (mouse == nullptr) ? GetLastError() : ERROR_SUCCESS;
 
     if (kb == nullptr || mouse == nullptr)
     {
+        if (kb != nullptr)
+        {
+            UnhookWindowsHookEx(kb);
+        }
+        if (mouse != nullptr)
+        {
+            UnhookWindowsHookEx(mouse);
+        }
+
+        keyboard_hook.store(nullptr, std::memory_order_release);
+        mouse_hook.store(nullptr, std::memory_order_release);
+        registered_ = false;
+
         qWarning() << "[HOTKEY] Failed to install hooks. Keyboard:" << (kb != nullptr) << "Mouse:" << (mouse != nullptr)
-                   << "Error:" << GetLastError();
+                   << "KeyboardError:" << kb_error << "MouseError:" << mouse_error;
+        return;
     }
 
+    keyboard_hook.store(kb, std::memory_order_release);
+    mouse_hook.store(mouse, std::memory_order_release);
     registered_ = (kb != nullptr) && (mouse != nullptr);
 }
 
 void HotkeyManager::UnregisterAll()
 {
-    if (!registered_)
+    if (auto kb = keyboard_hook.exchange(nullptr, std::memory_order_acq_rel))
     {
-        return;
+        UnhookWindowsHookEx(kb);
+    }
+    if (auto mouse = mouse_hook.exchange(nullptr, std::memory_order_acq_rel))
+    {
+        UnhookWindowsHookEx(mouse);
     }
 
-    if (keyboard_hook)
-    {
-        UnhookWindowsHookEx(keyboard_hook);
-    }
-    if (mouse_hook)
-    {
-        UnhookWindowsHookEx(mouse_hook);
-    }
-
-    keyboard_hook = nullptr;
-    mouse_hook = nullptr;
     registered_ = false;
 }
 
