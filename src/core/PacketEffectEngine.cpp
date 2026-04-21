@@ -1,18 +1,16 @@
 #include "core/PacketEffectEngine.h"
 
-#include <utility>
-
 namespace scrambler::core
 {
 
 void PacketEffectEmission::AddImmediate(OwnedPacket packet)
 {
-    immediate_packets.push_back(std::move(packet));
+    immediate_packets.push_back((packet));
 }
 
 void PacketEffectEmission::AddScheduled(OwnedPacket packet, std::chrono::steady_clock::time_point release_at)
 {
-    scheduled_packets.push_back({.packet = std::move(packet), .release_at = release_at});
+    scheduled_packets.push_back({.packet = packet, .release_at = release_at});
 }
 
 bool PacketEffectEmission::HasEffect(PacketEffectKind kind) const
@@ -85,8 +83,7 @@ PacketEffectEngine::PacketEffectEngine(const EffectConfig& effects)
 
 PacketEffectEmission PacketEffectEngine::Process(OwnedPacket packet, std::chrono::steady_clock::time_point now)
 {
-    return packet.metadata.is_outbound ? outbound_.Process(std::move(packet), now)
-                                       : inbound_.Process(std::move(packet), now);
+    return packet.metadata.is_outbound ? outbound_.Process(packet, now) : inbound_.Process(packet, now);
 }
 
 }  // namespace scrambler::core
