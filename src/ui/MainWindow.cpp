@@ -128,52 +128,99 @@ void MainWindow::SetupUi()
     auto* effects_group = new QGroupBox("Network Conditions");
     auto* effects_layout = new QVBoxLayout(effects_group);
 
-    auto make_direction_combo = []() -> QComboBox*
+    auto make_effect_controls =
+        [](int max_value, const QString& suffix, QSlider*& slider, QSpinBox*& spinbox) -> QHBoxLayout*
     {
-        auto* combo = new QComboBox();
-        combo->addItem("Out", static_cast<int>(core::Direction::kOutbound));
-        combo->addItem("In", static_cast<int>(core::Direction::kInbound));
-        combo->addItem("Both", static_cast<int>(core::Direction::kBoth));
-        combo->setCurrentIndex(2);
-        combo->setFixedWidth(60);
-        return combo;
+        auto* layout = new QHBoxLayout();
+        slider = new QSlider(Qt::Horizontal);
+        slider->setRange(0, max_value);
+        slider->setValue(0);
+        spinbox = new QSpinBox();
+        spinbox->setRange(0, max_value);
+        spinbox->setSuffix(suffix);
+        spinbox->setFixedWidth(72);
+        layout->addWidget(slider);
+        layout->addWidget(spinbox);
+        return layout;
     };
 
-    // Delay row:
-    auto* delay_layout = new QHBoxLayout();
-    auto* delay_label = new QLabel("Delay (ms):");
-    delay_label->setFixedWidth(60);
-    delay_layout->addWidget(delay_label);
-    delay_slider_ = new QSlider(Qt::Horizontal);
-    delay_slider_->setRange(0, 1000);
-    delay_slider_->setValue(0);
-    delay_spinbox_ = new QSpinBox();
-    delay_spinbox_->setRange(0, 1000);
-    delay_spinbox_->setSuffix(" ms");
-    delay_spinbox_->setFixedWidth(60);
-    delay_direction_combo_ = make_direction_combo();
-    delay_layout->addWidget(delay_slider_);
-    delay_layout->addWidget(delay_spinbox_);
-    delay_layout->addWidget(delay_direction_combo_);
-    effects_layout->addLayout(delay_layout);
+    auto make_primary_effect_row = [](const QString& label_text,
+                                      int max_value,
+                                      const QString& suffix,
+                                      QSlider*& slider,
+                                      QSpinBox*& spinbox,
+                                      QCheckBox*& checkbox) -> QHBoxLayout*
+    {
+        auto* layout = new QHBoxLayout();
+        auto* label = new QLabel(label_text);
+        label->setFixedWidth(72);
+        checkbox = new QCheckBox("Asymmetric");
+        slider = new QSlider(Qt::Horizontal);
+        slider->setRange(0, max_value);
+        slider->setValue(0);
+        spinbox = new QSpinBox();
+        spinbox->setRange(0, max_value);
+        spinbox->setSuffix(suffix);
+        spinbox->setFixedWidth(72);
+        layout->addWidget(label);
+        layout->addWidget(slider);
+        layout->addWidget(spinbox);
+        layout->addWidget(checkbox);
+        return layout;
+    };
 
-    // Drop rate row
-    auto* drop_layout = new QHBoxLayout();
-    auto* drop_label = new QLabel("Drop rate:");
-    drop_label->setFixedWidth(60);
-    drop_layout->addWidget(drop_label);
-    drop_slider_ = new QSlider(Qt::Horizontal);
-    drop_slider_->setRange(0, 100);
-    drop_slider_->setValue(0);
-    drop_spinbox_ = new QSpinBox();
-    drop_spinbox_->setRange(0, 100);
-    drop_spinbox_->setSuffix(" %");
-    drop_spinbox_->setFixedWidth(60);
-    drop_direction_combo_ = make_direction_combo();
-    drop_layout->addWidget(drop_slider_);
-    drop_layout->addWidget(drop_spinbox_);
-    drop_layout->addWidget(drop_direction_combo_);
-    effects_layout->addLayout(drop_layout);
+    auto make_directional_controls = [&](QWidget*& container,
+                                         int max_value,
+                                         const QString& suffix,
+                                         QSlider*& outbound_slider,
+                                         QSpinBox*& outbound_spinbox,
+                                         QSlider*& inbound_slider,
+                                         QSpinBox*& inbound_spinbox)
+    {
+        container = new QWidget();
+        auto* layout = new QVBoxLayout(container);
+        layout->setContentsMargins(24, 0, 0, 0);
+
+        auto* outbound_row = new QHBoxLayout();
+        auto* outbound_label = new QLabel("Out:");
+        outbound_label->setFixedWidth(48);
+        outbound_row->addWidget(outbound_label);
+        auto* outbound_controls = make_effect_controls(max_value, suffix, outbound_slider, outbound_spinbox);
+        outbound_row->addLayout(outbound_controls);
+
+        auto* inbound_row = new QHBoxLayout();
+        auto* inbound_label = new QLabel("In:");
+        inbound_label->setFixedWidth(48);
+        inbound_row->addWidget(inbound_label);
+        auto* inbound_controls = make_effect_controls(max_value, suffix, inbound_slider, inbound_spinbox);
+        inbound_row->addLayout(inbound_controls);
+
+        layout->addLayout(outbound_row);
+        layout->addLayout(inbound_row);
+        container->setVisible(false);
+    };
+
+    effects_layout->addLayout(
+        make_primary_effect_row("Delay:", 1000, " ms", delay_slider_, delay_spinbox_, delay_asymmetric_checkbox_));
+    make_directional_controls(delay_asymmetric_controls_,
+                              1000,
+                              " ms",
+                              outbound_delay_slider_,
+                              outbound_delay_spinbox_,
+                              inbound_delay_slider_,
+                              inbound_delay_spinbox_);
+    effects_layout->addWidget(delay_asymmetric_controls_);
+
+    effects_layout->addLayout(
+        make_primary_effect_row("Drop:", 100, " %", drop_slider_, drop_spinbox_, drop_asymmetric_checkbox_));
+    make_directional_controls(drop_asymmetric_controls_,
+                              100,
+                              " %",
+                              outbound_drop_slider_,
+                              outbound_drop_spinbox_,
+                              inbound_drop_slider_,
+                              inbound_drop_spinbox_);
+    effects_layout->addWidget(drop_asymmetric_controls_);
 
     network_layout->addWidget(effects_group);
 
@@ -290,42 +337,122 @@ void MainWindow::SetupUi()
     connect(process_tree_, &QTreeWidget::itemSelectionChanged, this, &MainWindow::OnProcessSelectionChanged);
     connect(start_stop_button_, &QPushButton::clicked, this, &MainWindow::OnStartStopClicked);
 
-    connect(delay_slider_, &QSlider::valueChanged, delay_spinbox_, &QSpinBox::setValue);
-    connect(delay_spinbox_, qOverload<int>(&QSpinBox::valueChanged), delay_slider_, &QSlider::setValue);
+    auto connect_slider_pair = [](QSlider* slider, QSpinBox* spinbox)
+    {
+        QObject::connect(slider, &QSlider::valueChanged, spinbox, &QSpinBox::setValue);
+        QObject::connect(spinbox, qOverload<int>(&QSpinBox::valueChanged), slider, &QSlider::setValue);
+    };
+
+    connect_slider_pair(delay_slider_, delay_spinbox_);
+    connect_slider_pair(drop_slider_, drop_spinbox_);
+    connect_slider_pair(outbound_delay_slider_, outbound_delay_spinbox_);
+    connect_slider_pair(inbound_delay_slider_, inbound_delay_spinbox_);
+    connect_slider_pair(outbound_drop_slider_, outbound_drop_spinbox_);
+    connect_slider_pair(inbound_drop_slider_, inbound_drop_spinbox_);
+
+    auto sync_slider_value = [](QSlider* slider, int value)
+    {
+        if (slider->value() != value)
+        {
+            slider->setValue(value);
+        }
+    };
+
     connect(delay_slider_,
             &QSlider::valueChanged,
             this,
-            [this](int value)
+            [this, sync_slider_value](int value)
     {
-        effects_.delay_ms.store(value);
+        effects_.outbound_delay_ms.store(value);
+        effects_.inbound_delay_ms.store(value);
+        sync_slider_value(outbound_delay_slider_, value);
+        sync_slider_value(inbound_delay_slider_, value);
     });
 
-    connect(drop_slider_, &QSlider::valueChanged, drop_spinbox_, &QSpinBox::setValue);
-    connect(drop_spinbox_, qOverload<int>(&QSpinBox::valueChanged), drop_slider_, &QSlider::setValue);
     connect(drop_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this, sync_slider_value](int value)
+    {
+        const float rate = static_cast<float>(value) / 100.0F;
+        effects_.outbound_drop_rate.store(rate);
+        effects_.inbound_drop_rate.store(rate);
+        sync_slider_value(outbound_drop_slider_, value);
+        sync_slider_value(inbound_drop_slider_, value);
+    });
+
+    connect(outbound_delay_slider_,
             &QSlider::valueChanged,
             this,
             [this](int value)
     {
-        effects_.drop_rate.store(static_cast<float>(value) / 100.0F);
+        effects_.outbound_delay_ms.store(value);
     });
 
-    connect(delay_direction_combo_,
-            qOverload<int>(&QComboBox::currentIndexChanged),
+    connect(inbound_delay_slider_,
+            &QSlider::valueChanged,
             this,
-            [this](int index)
+            [this](int value)
     {
-        auto dir = static_cast<core::Direction>(delay_direction_combo_->itemData(index).toInt());
-        effects_.delay_direction.store(dir);
+        effects_.inbound_delay_ms.store(value);
     });
 
-    connect(drop_direction_combo_,
-            qOverload<int>(&QComboBox::currentIndexChanged),
+    connect(outbound_drop_slider_,
+            &QSlider::valueChanged,
             this,
-            [this](int index)
+            [this](int value)
     {
-        auto dir = static_cast<core::Direction>(drop_direction_combo_->itemData(index).toInt());
-        effects_.drop_direction.store(dir);
+        effects_.outbound_drop_rate.store(static_cast<float>(value) / 100.0F);
+    });
+
+    connect(inbound_drop_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this](int value)
+    {
+        effects_.inbound_drop_rate.store(static_cast<float>(value) / 100.0F);
+    });
+
+    connect(delay_asymmetric_checkbox_,
+            &QCheckBox::toggled,
+            this,
+            [this](bool checked)
+    {
+        if (checked)
+        {
+            const int shared_value = delay_slider_->value();
+            outbound_delay_slider_->setValue(shared_value);
+            inbound_delay_slider_->setValue(shared_value);
+        }
+        else
+        {
+            delay_slider_->setValue(outbound_delay_slider_->value());
+        }
+
+        delay_slider_->setEnabled(!checked);
+        delay_spinbox_->setEnabled(!checked);
+        delay_asymmetric_controls_->setVisible(checked);
+    });
+
+    connect(drop_asymmetric_checkbox_,
+            &QCheckBox::toggled,
+            this,
+            [this](bool checked)
+    {
+        if (checked)
+        {
+            const int shared_value = drop_slider_->value();
+            outbound_drop_slider_->setValue(shared_value);
+            inbound_drop_slider_->setValue(shared_value);
+        }
+        else
+        {
+            drop_slider_->setValue(outbound_drop_slider_->value());
+        }
+
+        drop_slider_->setEnabled(!checked);
+        drop_spinbox_->setEnabled(!checked);
+        drop_asymmetric_controls_->setVisible(checked);
     });
 
     auto connect_hotkey_edit = [this](HotkeyEdit* edit, HotkeyAction action)
@@ -500,22 +627,56 @@ void MainWindow::StopPipeline()
 
 void MainWindow::OnHotkeyTriggered(HotkeyAction action)
 {
+    auto adjust_pair = [](QSlider* first, QSlider* second, int delta)
+    {
+        first->setValue(first->value() + delta);
+        second->setValue(second->value() + delta);
+    };
+
     switch (action)
     {
         case HotkeyAction::kToggleEffects:
             OnStartStopClicked();
             break;
         case HotkeyAction::kIncrementDelay:
-            delay_slider_->setValue(delay_slider_->value() + delay_step_spinbox_->value());
+            if (delay_asymmetric_checkbox_->isChecked())
+            {
+                adjust_pair(outbound_delay_slider_, inbound_delay_slider_, delay_step_spinbox_->value());
+            }
+            else
+            {
+                delay_slider_->setValue(delay_slider_->value() + delay_step_spinbox_->value());
+            }
             break;
         case HotkeyAction::kDecrementDelay:
-            delay_slider_->setValue(delay_slider_->value() - delay_step_spinbox_->value());
+            if (delay_asymmetric_checkbox_->isChecked())
+            {
+                adjust_pair(outbound_delay_slider_, inbound_delay_slider_, -delay_step_spinbox_->value());
+            }
+            else
+            {
+                delay_slider_->setValue(delay_slider_->value() - delay_step_spinbox_->value());
+            }
             break;
         case HotkeyAction::kIncrementDropRate:
-            drop_slider_->setValue(drop_slider_->value() + drop_step_spinbox_->value());
+            if (drop_asymmetric_checkbox_->isChecked())
+            {
+                adjust_pair(outbound_drop_slider_, inbound_drop_slider_, drop_step_spinbox_->value());
+            }
+            else
+            {
+                drop_slider_->setValue(drop_slider_->value() + drop_step_spinbox_->value());
+            }
             break;
         case HotkeyAction::kDecrementDropRate:
-            drop_slider_->setValue(drop_slider_->value() - drop_step_spinbox_->value());
+            if (drop_asymmetric_checkbox_->isChecked())
+            {
+                adjust_pair(outbound_drop_slider_, inbound_drop_slider_, -drop_step_spinbox_->value());
+            }
+            else
+            {
+                drop_slider_->setValue(drop_slider_->value() - drop_step_spinbox_->value());
+            }
             break;
         default:
             break;

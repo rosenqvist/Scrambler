@@ -10,7 +10,6 @@
 #include "ui/SoundPlayer.h"
 
 #include <QCheckBox>
-#include <QComboBox>
 #include <QFutureWatcher>
 #include <QIcon>
 #include <QLabel>
@@ -80,10 +79,20 @@ private:  // NOLINT(readability-redundant-access-specifiers)
     // --- Effect controls ---
     QSlider* delay_slider_ = nullptr;
     QSpinBox* delay_spinbox_ = nullptr;
-    QComboBox* delay_direction_combo_ = nullptr;
+    QCheckBox* delay_asymmetric_checkbox_ = nullptr;
+    QWidget* delay_asymmetric_controls_ = nullptr;
+    QSlider* outbound_delay_slider_ = nullptr;
+    QSpinBox* outbound_delay_spinbox_ = nullptr;
+    QSlider* inbound_delay_slider_ = nullptr;
+    QSpinBox* inbound_delay_spinbox_ = nullptr;
     QSlider* drop_slider_ = nullptr;
     QSpinBox* drop_spinbox_ = nullptr;
-    QComboBox* drop_direction_combo_ = nullptr;
+    QCheckBox* drop_asymmetric_checkbox_ = nullptr;
+    QWidget* drop_asymmetric_controls_ = nullptr;
+    QSlider* outbound_drop_slider_ = nullptr;
+    QSpinBox* outbound_drop_spinbox_ = nullptr;
+    QSlider* inbound_drop_slider_ = nullptr;
+    QSpinBox* inbound_drop_spinbox_ = nullptr;
 
     // --- Hotkey controls ---
     HotkeyEdit* toggle_hotkey_edit_ = nullptr;

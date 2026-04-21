@@ -10,44 +10,22 @@
 namespace scrambler::core
 {
 
-enum class Direction : std::uint8_t
-{
-    kOutbound = 0,
-    kInbound = 1,
-    kBoth = 2,
-};
-
 struct EffectConfig
 {
 public:
-    std::atomic<int> delay_ms{0};
-    std::atomic<float> drop_rate{0.0F};
-    std::atomic<Direction> delay_direction{Direction::kBoth};
-    std::atomic<Direction> drop_direction{Direction::kBoth};
+    std::atomic<int> outbound_delay_ms{0};
+    std::atomic<int> inbound_delay_ms{0};
+    std::atomic<float> outbound_drop_rate{0.0F};
+    std::atomic<float> inbound_drop_rate{0.0F};
 
-    bool MatchesDelayDirection(bool is_outbound) const
+    std::chrono::milliseconds Delay(bool is_outbound) const
     {
-        return MatchesDirection(delay_direction.load(), is_outbound);
+        return std::chrono::milliseconds(is_outbound ? outbound_delay_ms.load() : inbound_delay_ms.load());
     }
 
-    bool MatchesDropDirection(bool is_outbound) const
+    float DropRate(bool is_outbound) const
     {
-        return MatchesDirection(drop_direction.load(), is_outbound);
-    }
-
-    std::chrono::milliseconds Delay() const
-    {
-        return std::chrono::milliseconds(delay_ms.load());
-    }
-
-private:
-    static bool MatchesDirection(Direction dir, bool is_outbound)
-    {
-        if (dir == Direction::kBoth)
-        {
-            return true;
-        }
-        return (dir == Direction::kOutbound) == is_outbound;
+        return is_outbound ? outbound_drop_rate.load() : inbound_drop_rate.load();
     }
 };
 

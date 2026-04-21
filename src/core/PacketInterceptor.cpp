@@ -235,9 +235,11 @@ void PacketInterceptor::CaptureLoop()
                 if (pid != 0 && targets_.Contains(pid))
                 {
                     bool is_outbound = addr.Outbound != 0;
+                    const float drop_rate = effects_.DropRate(is_outbound);
+                    const auto delay = effects_.Delay(is_outbound);
 
                     // Apply Drop Effect
-                    if (effects_.MatchesDropDirection(is_outbound) && ShouldDrop(effects_.drop_rate.load()))
+                    if (ShouldDrop(drop_rate))
                     {
 #ifndef NDEBUG
                         auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
@@ -255,8 +257,7 @@ void PacketInterceptor::CaptureLoop()
                     // Apply Delay Effect
                     else
                     {
-                        auto delay = effects_.Delay();
-                        if (delay.count() > 0 && effects_.MatchesDelayDirection(is_outbound))
+                        if (delay.count() > 0)
                         {
 #ifndef NDEBUG
                             auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
