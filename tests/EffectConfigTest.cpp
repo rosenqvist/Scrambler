@@ -4,8 +4,10 @@
 
 using scrambler::core::EffectConfig;
 using scrambler::core::ShouldDrop;
+using scrambler::core::kDefaultBurstDropLength;
 using scrambler::core::kDefaultDuplicateCopies;
 using scrambler::core::kMaxDelayJitterMs;
+using scrambler::core::kMaxBurstDropLength;
 using scrambler::core::kMaxDuplicateCopies;
 
 //  Delays
@@ -80,6 +82,46 @@ TEST(EffectConfigTest, DefaultDropRateIsZero)
     EXPECT_FLOAT_EQ(effects.DropRate(false), 0.0F);
 }
 
+TEST(EffectConfigTest, BurstLossDefaultsAreDisabled)
+{
+    EffectConfig effects;
+
+    EXPECT_FALSE(effects.BurstDropEnabled(true));
+    EXPECT_FALSE(effects.BurstDropEnabled(false));
+    EXPECT_FLOAT_EQ(effects.BurstDropRate(true), 0.0F);
+    EXPECT_FLOAT_EQ(effects.BurstDropRate(false), 0.0F);
+    EXPECT_EQ(effects.BurstDropLength(true), kDefaultBurstDropLength);
+    EXPECT_EQ(effects.BurstDropLength(false), kDefaultBurstDropLength);
+}
+
+TEST(EffectConfigTest, BurstLossSettingsCanDifferByDirection)
+{
+    EffectConfig effects;
+    effects.SetBurstDropEnabled(true, true);
+    effects.SetBurstDropEnabled(false, true);
+    effects.SetBurstDropRate(true, 0.20F);
+    effects.SetBurstDropRate(false, 0.55F);
+    effects.SetBurstDropLength(true, 4);
+    effects.SetBurstDropLength(false, 7);
+
+    EXPECT_TRUE(effects.BurstDropEnabled(true));
+    EXPECT_TRUE(effects.BurstDropEnabled(false));
+    EXPECT_FLOAT_EQ(effects.BurstDropRate(true), 0.20F);
+    EXPECT_FLOAT_EQ(effects.BurstDropRate(false), 0.55F);
+    EXPECT_EQ(effects.BurstDropLength(true), 4);
+    EXPECT_EQ(effects.BurstDropLength(false), 7);
+}
+
+TEST(EffectConfigTest, BurstLossLengthIsClampedToSupportedRange)
+{
+    EffectConfig effects;
+    effects.SetBurstDropLength(true, kMaxBurstDropLength + 10);
+    effects.SetBurstDropLength(false, 0);
+
+    EXPECT_EQ(effects.BurstDropLength(true), kMaxBurstDropLength);
+    EXPECT_EQ(effects.BurstDropLength(false), 1);
+}
+
 TEST(EffectConfigTest, DefaultDuplicateRateIsZero)
 {
     EffectConfig effects;
@@ -133,7 +175,7 @@ TEST(EffectConfigTest, FiftyPercentDropRateIsRoughlyHalf)
         }
     }
 
-    double ratio = static_cast<double>(dropped) / kTrials;
+    const double ratio = static_cast<double>(dropped) / kTrials;
     EXPECT_GT(ratio, 0.45);
     EXPECT_LT(ratio, 0.55);
 }
@@ -151,7 +193,7 @@ TEST(EffectConfigTest, TenPercentDropRateIsRoughlyTenPercent)
         }
     }
 
-    double ratio = static_cast<double>(dropped) / kTrials;
+    const double ratio = static_cast<double>(dropped) / kTrials;
     EXPECT_GT(ratio, 0.07);
     EXPECT_LT(ratio, 0.13);
 }
@@ -220,13 +262,19 @@ TEST(EffectConfigTest, DelayAndDropValuesAreIndependentByDirection)
     EXPECT_FLOAT_EQ(effects.DropRate(false), 0.35F);
 }
 
-TEST(EffectConfigTest, DelayJitterDropAndDuplicateValuesAreIndependentByDirection)
+TEST(EffectConfigTest, DelayJitterBurstDropAndDuplicateValuesAreIndependentByDirection)
 {
     EffectConfig effects;
     effects.SetDelayMs(true, 80);
     effects.SetDelayMs(false, 260);
     effects.SetDelayJitterMs(true, 25);
     effects.SetDelayJitterMs(false, 70);
+    effects.SetBurstDropEnabled(true, true);
+    effects.SetBurstDropEnabled(false, true);
+    effects.SetBurstDropRate(true, 0.20F);
+    effects.SetBurstDropRate(false, 0.60F);
+    effects.SetBurstDropLength(true, 4);
+    effects.SetBurstDropLength(false, 6);
     effects.SetDropRate(true, 0.10F);
     effects.SetDropRate(false, 0.35F);
     effects.SetDuplicateRate(true, 0.15F);
@@ -238,6 +286,12 @@ TEST(EffectConfigTest, DelayJitterDropAndDuplicateValuesAreIndependentByDirectio
     EXPECT_EQ(effects.Delay(false).count(), 260);
     EXPECT_EQ(effects.DelayJitter(true).count(), 25);
     EXPECT_EQ(effects.DelayJitter(false).count(), 70);
+    EXPECT_TRUE(effects.BurstDropEnabled(true));
+    EXPECT_TRUE(effects.BurstDropEnabled(false));
+    EXPECT_FLOAT_EQ(effects.BurstDropRate(true), 0.20F);
+    EXPECT_FLOAT_EQ(effects.BurstDropRate(false), 0.60F);
+    EXPECT_EQ(effects.BurstDropLength(true), 4);
+    EXPECT_EQ(effects.BurstDropLength(false), 6);
     EXPECT_FLOAT_EQ(effects.DropRate(true), 0.10F);
     EXPECT_FLOAT_EQ(effects.DropRate(false), 0.35F);
     EXPECT_FLOAT_EQ(effects.DuplicateRate(true), 0.15F);
@@ -246,6 +300,12 @@ TEST(EffectConfigTest, DelayJitterDropAndDuplicateValuesAreIndependentByDirectio
     EXPECT_EQ(effects.DuplicateCount(false), 5);
     EXPECT_EQ(effects.Snapshot(true).delay_jitter.count(), 25);
     EXPECT_EQ(effects.Snapshot(false).delay_jitter.count(), 70);
+    EXPECT_TRUE(effects.Snapshot(true).burst_drop_enabled);
+    EXPECT_TRUE(effects.Snapshot(false).burst_drop_enabled);
+    EXPECT_FLOAT_EQ(effects.Snapshot(true).burst_drop_rate, 0.20F);
+    EXPECT_FLOAT_EQ(effects.Snapshot(false).burst_drop_rate, 0.60F);
+    EXPECT_EQ(effects.Snapshot(true).burst_drop_length, 4);
+    EXPECT_EQ(effects.Snapshot(false).burst_drop_length, 6);
     EXPECT_FLOAT_EQ(effects.Snapshot(true).duplicate_rate, 0.15F);
     EXPECT_FLOAT_EQ(effects.Snapshot(false).duplicate_rate, 0.45F);
     EXPECT_EQ(effects.Snapshot(true).duplicate_count, 2);
@@ -261,6 +321,12 @@ TEST(EffectConfigTest, DefaultsAreInert)
     EXPECT_EQ(effects.Direction(false).DelayMs(), 0);
     EXPECT_EQ(effects.Direction(true).DropRate(), 0.0F);
     EXPECT_EQ(effects.Direction(false).DropRate(), 0.0F);
+    EXPECT_FALSE(effects.Direction(true).BurstDropEnabled());
+    EXPECT_FALSE(effects.Direction(false).BurstDropEnabled());
+    EXPECT_FLOAT_EQ(effects.Direction(true).BurstDropRate(), 0.0F);
+    EXPECT_FLOAT_EQ(effects.Direction(false).BurstDropRate(), 0.0F);
+    EXPECT_EQ(effects.Direction(true).BurstDropLength(), kDefaultBurstDropLength);
+    EXPECT_EQ(effects.Direction(false).BurstDropLength(), kDefaultBurstDropLength);
     EXPECT_EQ(effects.Direction(true).DuplicateRate(), 0.0F);
     EXPECT_EQ(effects.Direction(false).DuplicateRate(), 0.0F);
     EXPECT_EQ(effects.Direction(true).DuplicateCount(), kDefaultDuplicateCopies);

@@ -51,7 +51,7 @@ private slots:
     // Invoked on the UI thread (via queued connection) when the core pipeline
     // exits due to a terminal driver error. Tears down the pipeline and
     // visually show the GLE in the status bar.
-    void OnPipelineFatal(quint32 gle);
+    void OnPipelineFatal(uint32_t gle);
 
 private:  // NOLINT(readability-redundant-access-specifiers)
     // --- Setup ---
@@ -101,6 +101,23 @@ private:  // NOLINT(readability-redundant-access-specifiers)
     QSpinBox* outbound_drop_spinbox_ = nullptr;
     QSlider* inbound_drop_slider_ = nullptr;
     QSpinBox* inbound_drop_spinbox_ = nullptr;
+    QCheckBox* burst_drop_checkbox_ = nullptr;
+    QWidget* burst_drop_controls_ = nullptr;
+    QSlider* burst_drop_chance_slider_ = nullptr;
+    QSpinBox* burst_drop_chance_spinbox_ = nullptr;
+    QCheckBox* burst_drop_asymmetric_checkbox_ = nullptr;
+    QWidget* burst_drop_chance_asymmetric_controls_ = nullptr;
+    QSlider* outbound_burst_drop_chance_slider_ = nullptr;
+    QSpinBox* outbound_burst_drop_chance_spinbox_ = nullptr;
+    QSlider* inbound_burst_drop_chance_slider_ = nullptr;
+    QSpinBox* inbound_burst_drop_chance_spinbox_ = nullptr;
+    QSlider* burst_drop_length_slider_ = nullptr;
+    QSpinBox* burst_drop_length_spinbox_ = nullptr;
+    QWidget* burst_drop_length_asymmetric_controls_ = nullptr;
+    QSlider* outbound_burst_drop_length_slider_ = nullptr;
+    QSpinBox* outbound_burst_drop_length_spinbox_ = nullptr;
+    QSlider* inbound_burst_drop_length_slider_ = nullptr;
+    QSpinBox* inbound_burst_drop_length_spinbox_ = nullptr;
     QSlider* duplicate_slider_ = nullptr;
     QSpinBox* duplicate_spinbox_ = nullptr;
     QCheckBox* duplicate_asymmetric_checkbox_ = nullptr;

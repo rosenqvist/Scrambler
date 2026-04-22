@@ -52,10 +52,11 @@ public:
     [[nodiscard]] PacketEffectEmission Process(OwnedPacket packet, std::chrono::steady_clock::time_point now);
 
 private:
-    // Future bandwidth throttling, reordering, and burst-loss policies live here
-    // as long-lived per-direction stateful members.
+    // Stateful per-direction effect memory lives here. Burst loss already uses
+    // this, and throttling/reordering will follow the same pattern.
     const DirectionEffectConfig* config_ = nullptr;
     std::mt19937 rng_;
+    int burst_packets_remaining_ = 0;
 };
 
 class PacketEffectEngine

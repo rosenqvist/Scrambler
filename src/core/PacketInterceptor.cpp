@@ -1,11 +1,32 @@
 #include "core/PacketInterceptor.h"
 
+#include "core/DelayQueue.h"
 #include "core/Diagnostics.h"
+#include "core/EffectConfig.h"
+#include "core/FlowTracker.h"
+#include "core/PacketData.h"
+#include "core/PacketEffectEngine.h"
+#include "core/StartupError.h"
+#include "core/Types.h"
+
+#include <windivert.h>
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <errhandlingapi.h>
+#include <expected>
+#include <handleapi.h>
+#include <memory>
+#include <minwindef.h>
 #include <span>
 #include <utility>
+#include <vector>
+
 
 namespace scrambler::core
 {
@@ -33,15 +54,15 @@ std::expected<void, StartupError> PacketInterceptor::Start()
 
     if (handle_ == INVALID_HANDLE_VALUE)
     {
-        const DWORD gle = GetLastError();
+        const auto gle = static_cast<std::uint32_t>(GetLastError());
         LogError("PacketInterceptor: WinDivertOpen failed (GLE={})", gle);
         CountEvent(Counter::kDriverErrors);
         return std::unexpected(MapWinDivertOpenError(gle));
     }
 
     // Driver side queue constants that are safe and tested.
-    constexpr UINT64 kQueueLength = 8192;
-    constexpr auto kQueueSizeBytes = static_cast<const UINT64>(8 * 1024 * 1024);
+    constexpr std::uint64_t kQueueLength = 8192;
+    constexpr auto kQueueSizeBytes = static_cast<std::uint64_t>(8 * 1024 * 1024);
 
     if (WinDivertSetParam(handle_, WINDIVERT_PARAM_QUEUE_LENGTH, kQueueLength) == 0)
     {
@@ -126,8 +147,8 @@ bool PacketInterceptor::IsRunning() const
 void PacketInterceptor::CaptureLoop()
 {
     // Batch config
-    constexpr UINT kBatchSize = 128;  // Up to 128 packets per kernel transition
-    constexpr UINT kRecvBufferLen = kBatchSize * kStandardMtuSize;
+    constexpr unsigned int kBatchSize = 128;  // Up to 128 packets per kernel transition
+    constexpr unsigned int kRecvBufferLen = kBatchSize * kStandardMtuSize;
 
     // Receive buffers
     std::vector<uint8_t> recv_buf(kRecvBufferLen);
@@ -143,15 +164,15 @@ void PacketInterceptor::CaptureLoop()
 
     while (running_.load())
     {
-        UINT recv_len = 0;
-        UINT addr_len = kBatchSize * sizeof(WINDIVERT_ADDRESS);
+        unsigned int recv_len = 0;
+        unsigned int addr_len = kBatchSize * sizeof(WINDIVERT_ADDRESS);
 
         // We can capture about 128 packets in a single kernel call
         if (WinDivertRecvEx(
                 handle_, recv_buf.data(), kRecvBufferLen, &recv_len, 0, recv_addrs.data(), &addr_len, nullptr)
             == 0)
         {
-            const DWORD gle = GetLastError();
+            const auto gle = static_cast<std::uint32_t>(GetLastError());
             switch (ClassifyRecvFailure(gle, consecutive_failures, "PacketInterceptor"))
             {
                 case RecvFailureAction::kContinue:
@@ -166,16 +187,16 @@ void PacketInterceptor::CaptureLoop()
 
         consecutive_failures = 0;
 
-        UINT num_packets = addr_len / sizeof(WINDIVERT_ADDRESS);
+        const unsigned int num_packets = addr_len / sizeof(WINDIVERT_ADDRESS);
 
         // Count direction up front. The per-packet loop only reads addr.Outbound
         // when a packet matches a tracked PID, so we'd miss the majority otherwise.
         // recv_addrs is gonna be hot in cache here. Two atomic fetch_adds per batch keep
         // the hot path cost unchanged.
-        UINT outbound_count = 0;
-        for (UINT i = 0; i < num_packets; ++i)
+        unsigned int outbound_count = 0;
+        for (unsigned int i = 0; i < num_packets; ++i)
         {
-            if (recv_addrs[i].Outbound != 0)
+            if (recv_addrs.at(static_cast<size_t>(i)).Outbound != 0)
             {
                 ++outbound_count;
             }
@@ -184,7 +205,7 @@ void PacketInterceptor::CaptureLoop()
         CountEvent(Counter::kPacketsCapturedInbound, num_packets - outbound_count);
 
         uint8_t* current_pkt = recv_buf.data();
-        UINT current_remaining = recv_len;
+        unsigned int current_remaining = recv_len;
 
         send_buf.clear();
         send_addrs.clear();
@@ -211,14 +232,14 @@ void PacketInterceptor::CaptureLoop()
         };
 
         // Walk through the batched buffer
-        for (UINT i = 0; i < num_packets; ++i)
+        for (unsigned int i = 0; i < num_packets; ++i)
         {
-            const WINDIVERT_ADDRESS& addr = recv_addrs[i];
+            const WINDIVERT_ADDRESS& addr = recv_addrs.at(static_cast<size_t>(i));
 
             WINDIVERT_IPHDR* ip = nullptr;
             WINDIVERT_UDPHDR* udp = nullptr;
-            PVOID next_pkt = nullptr;
-            UINT next_len = 0;
+            void* next_pkt = nullptr;
+            unsigned int next_len = 0;
 
             // This helper is needed to find the length of the current packet and get the pointer to the next one
             if (WinDivertHelperParsePacket(current_pkt,
@@ -248,7 +269,7 @@ void PacketInterceptor::CaptureLoop()
                 break;
             }
 
-            const UINT pkt_len = current_remaining - next_len;
+            const unsigned int pkt_len = current_remaining - next_len;
             bool handled = false;
 
             // Process the individual packet
@@ -273,13 +294,14 @@ void PacketInterceptor::CaptureLoop()
                         {
 #ifndef NDEBUG
                             auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
-                            DEBUG_PRINT("[DROP]  PID {:>5} | {}:{} -> {}:{} ({} bytes)",
+                            DEBUG_PRINT("[DROP]  PID {:>5} | {}:{} -> {}:{} ({} bytes){}",
                                         pid,
                                         addrs.src.data(),
                                         tuple.src_port,
                                         addrs.dst.data(),
                                         tuple.dst_port,
-                                        pkt_len);
+                                        pkt_len,
+                                        emission.HasEffect(PacketEffectKind::kBurstDrop) ? " [burst]" : "");
 #endif
                             CountEvent(is_outbound ? Counter::kPacketsDroppedOutbound
                                                    : Counter::kPacketsDroppedInbound);
@@ -289,9 +311,9 @@ void PacketInterceptor::CaptureLoop()
                         {
 #ifndef NDEBUG
                             const auto scheduled_delay =
-                                (std::max)(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                               emission.scheduled_packets.front().release_at - now),
-                                           std::chrono::milliseconds::zero());
+                                (std::max) (std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                emission.scheduled_packets.front().release_at - now),
+                                            std::chrono::milliseconds::zero());
                             auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
                             DEBUG_PRINT("[DELAY] PID {:>5} | {}:{} -> {}:{} ({} bytes) +{}ms{}",
                                         pid,

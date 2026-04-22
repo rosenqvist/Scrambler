@@ -1,23 +1,52 @@
 #include "ui/MainWindow.h"
 
+#include "core/EffectConfig.h"
+#include "core/FlowTracker.h"
+#include "core/PacketInterceptor.h"
+#include "core/StartupError.h"
 #include "platform/ProcessEnumerator.h"
+#include "ui/DiagnosticsTab.h"
+#include "ui/HotkeyEdit.h"
+#include "ui/HotkeyManager.h"
+#include "ui/SoundPlayer.h"
 
+#include <QAbstractItemView>
 #include <QFileIconProvider>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QFutureWatcher>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QIcon>
+#include <QLineEdit>
+#include <QMainWindow>
 #include <QMessageBox>
 #include <QMetaObject>
+#include <QObject>
+#include <QOverload>
+#include <QPushButton>
 #include <QSettings>
+#include <QSlider>
+#include <QSpinBox>
 #include <QStatusBar>
-#include <QtConcurrent>
+#include <Qt>
+#include <QTabWidget>
+#include <QtConcurrent/QtConcurrentRun>
+#include <QtCore/qobjectdefs.h>
+#include <QtGlobal>
+#include <QTreeWidgetItem>
 #include <QVBoxLayout>
+#include <QWidget>
 
+#include <cstdint>
+#include <memory>
+#include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
+#include <vector>
+
 
 namespace scrambler::ui
 {
@@ -27,8 +56,8 @@ namespace
 // Recursively filters the tree. A node is visible if it matches the text itself.
 bool FilterTreeItem(QTreeWidgetItem* item, const QString& text)
 {
-    bool self_matches = text.isEmpty() || item->text(0).contains(text, Qt::CaseInsensitive)
-                        || item->text(1).contains(text, Qt::CaseInsensitive);
+    const bool self_matches = text.isEmpty() || item->text(0).contains(text, Qt::CaseInsensitive)
+                              || item->text(1).contains(text, Qt::CaseInsensitive);
 
     bool any_descendant_matches = false;
     for (int i = 0; i < item->childCount(); ++i)
@@ -237,8 +266,11 @@ void MainWindow::SetupUi()
                               inbound_jitter_spinbox_);
     effects_layout->addWidget(jitter_asymmetric_controls_);
 
-    effects_layout->addLayout(
-        make_primary_effect_row("Drop:", 100, " %", drop_slider_, drop_spinbox_, drop_asymmetric_checkbox_));
+    auto* drop_row =
+        make_primary_effect_row("Drop:", 100, " %", drop_slider_, drop_spinbox_, drop_asymmetric_checkbox_);
+    burst_drop_checkbox_ = new QCheckBox("Burst loss");
+    drop_row->insertWidget(drop_row->count() - 1, burst_drop_checkbox_);
+    effects_layout->addLayout(drop_row);
     make_directional_controls(drop_asymmetric_controls_,
                               100,
                               " %",
@@ -247,6 +279,36 @@ void MainWindow::SetupUi()
                               inbound_drop_slider_,
                               inbound_drop_spinbox_);
     effects_layout->addWidget(drop_asymmetric_controls_);
+
+    burst_drop_controls_ = new QWidget();
+    auto* burst_drop_layout = new QVBoxLayout(burst_drop_controls_);
+    burst_drop_layout->setContentsMargins(24, 0, 0, 0);
+    burst_drop_layout->addLayout(make_primary_effect_row("Burst chance:",
+                                                         100,
+                                                         " %",
+                                                         burst_drop_chance_slider_,
+                                                         burst_drop_chance_spinbox_,
+                                                         burst_drop_asymmetric_checkbox_));
+    make_directional_controls(burst_drop_chance_asymmetric_controls_,
+                              100,
+                              " %",
+                              outbound_burst_drop_chance_slider_,
+                              outbound_burst_drop_chance_spinbox_,
+                              inbound_burst_drop_chance_slider_,
+                              inbound_burst_drop_chance_spinbox_);
+    burst_drop_layout->addWidget(burst_drop_chance_asymmetric_controls_);
+    burst_drop_layout->addLayout(make_labeled_effect_row(
+        "Burst length:", core::kMaxBurstDropLength, "", burst_drop_length_slider_, burst_drop_length_spinbox_));
+    make_directional_controls(burst_drop_length_asymmetric_controls_,
+                              core::kMaxBurstDropLength,
+                              "",
+                              outbound_burst_drop_length_slider_,
+                              outbound_burst_drop_length_spinbox_,
+                              inbound_burst_drop_length_slider_,
+                              inbound_burst_drop_length_spinbox_);
+    burst_drop_layout->addWidget(burst_drop_length_asymmetric_controls_);
+    burst_drop_controls_->setVisible(false);
+    effects_layout->addWidget(burst_drop_controls_);
 
     auto* duplicate_row = new QHBoxLayout();
     auto* duplicate_label = new QLabel("Duplicate:");
@@ -328,6 +390,18 @@ void MainWindow::SetupUi()
     initialize_duplicate_count_control(outbound_duplicate_count_slider_, outbound_duplicate_count_spinbox_);
     initialize_duplicate_count_control(inbound_duplicate_count_slider_, inbound_duplicate_count_spinbox_);
 
+    auto initialize_burst_length_control = [](QSlider* slider, QSpinBox* spinbox)
+    {
+        slider->setRange(1, core::kMaxBurstDropLength);
+        slider->setValue(core::kDefaultBurstDropLength);
+        spinbox->setRange(1, core::kMaxBurstDropLength);
+        spinbox->setValue(core::kDefaultBurstDropLength);
+    };
+
+    initialize_burst_length_control(burst_drop_length_slider_, burst_drop_length_spinbox_);
+    initialize_burst_length_control(outbound_burst_drop_length_slider_, outbound_burst_drop_length_spinbox_);
+    initialize_burst_length_control(inbound_burst_drop_length_slider_, inbound_burst_drop_length_spinbox_);
+
     network_layout->addWidget(effects_group);
 
     tab_widget_->addTab(network_tab, "Network");
@@ -355,7 +429,7 @@ void MainWindow::SetupUi()
                          [edit]
         {
             edit->SetBinding({});
-            emit edit->BindingChanged({});
+            edit->BindingChanged({});
         });
         return layout;
     };
@@ -421,7 +495,7 @@ void MainWindow::SetupUi()
     delay_step_spinbox_->setValue(settings.value("DelayStep", 10).toInt());
     drop_step_spinbox_->setValue(settings.value("DropStep", 1).toInt());
     sound_checkbox_->setChecked(settings.value("SoundEnabled", false).toBool());
-    int saved_volume = settings.value("Volume", 25).toInt();
+    const int saved_volume = settings.value("Volume", 25).toInt();
     settings.endGroup();
 
     volume_slider_->setValue(saved_volume);
@@ -458,6 +532,12 @@ void MainWindow::SetupUi()
     connect_slider_pair(inbound_jitter_slider_, inbound_jitter_spinbox_);
     connect_slider_pair(outbound_drop_slider_, outbound_drop_spinbox_);
     connect_slider_pair(inbound_drop_slider_, inbound_drop_spinbox_);
+    connect_slider_pair(burst_drop_chance_slider_, burst_drop_chance_spinbox_);
+    connect_slider_pair(outbound_burst_drop_chance_slider_, outbound_burst_drop_chance_spinbox_);
+    connect_slider_pair(inbound_burst_drop_chance_slider_, inbound_burst_drop_chance_spinbox_);
+    connect_slider_pair(burst_drop_length_slider_, burst_drop_length_spinbox_);
+    connect_slider_pair(outbound_burst_drop_length_slider_, outbound_burst_drop_length_spinbox_);
+    connect_slider_pair(inbound_burst_drop_length_slider_, inbound_burst_drop_length_spinbox_);
     connect_slider_pair(duplicate_slider_, duplicate_spinbox_);
     connect_slider_pair(outbound_duplicate_slider_, outbound_duplicate_spinbox_);
     connect_slider_pair(inbound_duplicate_slider_, inbound_duplicate_spinbox_);
@@ -482,6 +562,25 @@ void MainWindow::SetupUi()
         duplicate_count_asymmetric_controls_->setVisible(custom_copies && asymmetric);
         duplicate_count_slider_->setEnabled(custom_copies && !asymmetric);
         duplicate_count_spinbox_->setEnabled(custom_copies && !asymmetric);
+    };
+
+    auto update_burst_drop_controls_visibility = [this]()
+    {
+        const bool burst_mode = burst_drop_checkbox_->isChecked();
+        const bool asymmetric = burst_drop_asymmetric_checkbox_->isChecked();
+
+        burst_drop_controls_->setVisible(burst_mode);
+        drop_asymmetric_checkbox_->setEnabled(!burst_mode);
+        drop_slider_->setEnabled(!burst_mode && !drop_asymmetric_checkbox_->isChecked());
+        drop_spinbox_->setEnabled(!burst_mode && !drop_asymmetric_checkbox_->isChecked());
+        drop_asymmetric_controls_->setVisible(!burst_mode && drop_asymmetric_checkbox_->isChecked());
+
+        burst_drop_chance_slider_->setEnabled(burst_mode && !asymmetric);
+        burst_drop_chance_spinbox_->setEnabled(burst_mode && !asymmetric);
+        burst_drop_length_slider_->setEnabled(burst_mode && !asymmetric);
+        burst_drop_length_spinbox_->setEnabled(burst_mode && !asymmetric);
+        burst_drop_chance_asymmetric_controls_->setVisible(burst_mode && asymmetric);
+        burst_drop_length_asymmetric_controls_->setVisible(burst_mode && asymmetric);
     };
 
     connect(delay_slider_,
@@ -564,6 +663,61 @@ void MainWindow::SetupUi()
             [this](int value)
     {
         effects_.SetDropRate(false, static_cast<float>(value) / 100.0F);
+    });
+
+    connect(burst_drop_chance_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this, sync_slider_value](int value)
+    {
+        const float rate = static_cast<float>(value) / 100.0F;
+        effects_.SetBurstDropRate(true, rate);
+        effects_.SetBurstDropRate(false, rate);
+        sync_slider_value(outbound_burst_drop_chance_slider_, value);
+        sync_slider_value(inbound_burst_drop_chance_slider_, value);
+    });
+
+    connect(outbound_burst_drop_chance_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this](int value)
+    {
+        effects_.SetBurstDropRate(true, static_cast<float>(value) / 100.0F);
+    });
+
+    connect(inbound_burst_drop_chance_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this](int value)
+    {
+        effects_.SetBurstDropRate(false, static_cast<float>(value) / 100.0F);
+    });
+
+    connect(burst_drop_length_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this, sync_slider_value](int value)
+    {
+        effects_.SetBurstDropLength(true, value);
+        effects_.SetBurstDropLength(false, value);
+        sync_slider_value(outbound_burst_drop_length_slider_, value);
+        sync_slider_value(inbound_burst_drop_length_slider_, value);
+    });
+
+    connect(outbound_burst_drop_length_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this](int value)
+    {
+        effects_.SetBurstDropLength(true, value);
+    });
+
+    connect(inbound_burst_drop_length_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this](int value)
+    {
+        effects_.SetBurstDropLength(false, value);
     });
 
     connect(duplicate_slider_,
@@ -706,6 +860,39 @@ void MainWindow::SetupUi()
         drop_asymmetric_controls_->setVisible(checked);
     });
 
+    connect(burst_drop_checkbox_,
+            &QCheckBox::toggled,
+            this,
+            [this, update_burst_drop_controls_visibility](bool checked)
+    {
+        effects_.SetBurstDropEnabled(true, checked);
+        effects_.SetBurstDropEnabled(false, checked);
+        update_burst_drop_controls_visibility();
+    });
+
+    connect(burst_drop_asymmetric_checkbox_,
+            &QCheckBox::toggled,
+            this,
+            [this, update_burst_drop_controls_visibility](bool checked)
+    {
+        if (checked)
+        {
+            const int shared_chance = burst_drop_chance_slider_->value();
+            const int shared_length = burst_drop_length_slider_->value();
+            outbound_burst_drop_chance_slider_->setValue(shared_chance);
+            inbound_burst_drop_chance_slider_->setValue(shared_chance);
+            outbound_burst_drop_length_slider_->setValue(shared_length);
+            inbound_burst_drop_length_slider_->setValue(shared_length);
+        }
+        else
+        {
+            burst_drop_chance_slider_->setValue(outbound_burst_drop_chance_slider_->value());
+            burst_drop_length_slider_->setValue(outbound_burst_drop_length_slider_->value());
+        }
+
+        update_burst_drop_controls_visibility();
+    });
+
     connect(jitter_asymmetric_checkbox_,
             &QCheckBox::toggled,
             this,
@@ -759,6 +946,7 @@ void MainWindow::SetupUi()
         update_duplicate_copy_controls_visibility();
     });
 
+    update_burst_drop_controls_visibility();
     update_duplicate_copy_controls_visibility();
 
     auto connect_hotkey_edit = [this](HotkeyEdit* edit, HotkeyAction action)
@@ -792,7 +980,7 @@ void MainWindow::SetupUi()
                            dec_drop_hotkey_edit_})
         {
             edit->SetBinding({});
-            emit edit->BindingChanged({});
+            edit->BindingChanged({});
         }
     });
 
@@ -892,7 +1080,7 @@ void MainWindow::StartPipeline()
     PlayToggleSound(true);
 }
 
-void MainWindow::OnPipelineFatal(quint32 gle)
+void MainWindow::OnPipelineFatal(uint32_t gle)
 {
     // The user may have clicked Stop before this queued event was delivered.
     if (!running_)
@@ -1136,7 +1324,7 @@ QIcon MainWindow::IconToExePath(const std::wstring& exe_path)
         return it->second;
     }
 
-    QFileIconProvider icon_provider;
+    const QFileIconProvider icon_provider;
     auto info = QFileInfo(QString::fromStdWString(exe_path));
     QIcon icon = icon_provider.icon(info);
     icon_cache_.emplace(exe_path, icon);

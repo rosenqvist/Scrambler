@@ -14,12 +14,17 @@ namespace scrambler::core
 inline constexpr int kDefaultDuplicateCopies = 1;
 inline constexpr int kMaxDuplicateCopies = 64;
 inline constexpr int kMaxDelayJitterMs = 1000;
+inline constexpr int kDefaultBurstDropLength = 3;
+inline constexpr int kMaxBurstDropLength = 32;
 
 struct DirectionEffectSnapshot
 {
     std::chrono::milliseconds delay{0};
     std::chrono::milliseconds delay_jitter{0};
     int delay_jitter_ms = 0;
+    bool burst_drop_enabled = false;
+    float burst_drop_rate = 0.0F;
+    int burst_drop_length = kDefaultBurstDropLength;
     float drop_rate = 0.0F;
     float duplicate_rate = 0.0F;
     int duplicate_count = kDefaultDuplicateCopies;
@@ -33,6 +38,9 @@ public:
         return {.delay = std::chrono::milliseconds(DelayMs()),
                 .delay_jitter = std::chrono::milliseconds(DelayJitterMs()),
                 .delay_jitter_ms = DelayJitterMs(),
+                .burst_drop_enabled = BurstDropEnabled(),
+                .burst_drop_rate = BurstDropRate(),
+                .burst_drop_length = BurstDropLength(),
                 .drop_rate = DropRate(),
                 .duplicate_rate = DuplicateRate(),
                 .duplicate_count = DuplicateCount()};
@@ -66,6 +74,36 @@ public:
     void SetDelayJitterMs(int delay_jitter_ms)
     {
         delay_jitter_ms_.store(std::clamp(delay_jitter_ms, 0, kMaxDelayJitterMs), std::memory_order_relaxed);
+    }
+
+    [[nodiscard]] bool BurstDropEnabled() const
+    {
+        return burst_drop_enabled_.load(std::memory_order_relaxed);
+    }
+
+    void SetBurstDropEnabled(bool enabled)
+    {
+        burst_drop_enabled_.store(enabled, std::memory_order_relaxed);
+    }
+
+    [[nodiscard]] float BurstDropRate() const
+    {
+        return burst_drop_rate_.load(std::memory_order_relaxed);
+    }
+
+    void SetBurstDropRate(float burst_drop_rate)
+    {
+        burst_drop_rate_.store(std::clamp(burst_drop_rate, 0.0F, 1.0F), std::memory_order_relaxed);
+    }
+
+    [[nodiscard]] int BurstDropLength() const
+    {
+        return burst_drop_length_.load(std::memory_order_relaxed);
+    }
+
+    void SetBurstDropLength(int burst_drop_length)
+    {
+        burst_drop_length_.store(std::clamp(burst_drop_length, 1, kMaxBurstDropLength), std::memory_order_relaxed);
     }
 
     [[nodiscard]] float DropRate() const
@@ -102,6 +140,9 @@ public:
 private:
     std::atomic<int> delay_ms_{0};
     std::atomic<int> delay_jitter_ms_{0};
+    std::atomic<bool> burst_drop_enabled_{false};
+    std::atomic<float> burst_drop_rate_{0.0F};
+    std::atomic<int> burst_drop_length_{kDefaultBurstDropLength};
     std::atomic<float> drop_rate_{0.0F};
     std::atomic<float> duplicate_rate_{0.0F};
     std::atomic<int> duplicate_count_{kDefaultDuplicateCopies};
@@ -128,6 +169,21 @@ public:
         return Direction(is_outbound).DelayJitter();
     }
 
+    [[nodiscard]] bool BurstDropEnabled(bool is_outbound) const
+    {
+        return Direction(is_outbound).BurstDropEnabled();
+    }
+
+    [[nodiscard]] float BurstDropRate(bool is_outbound) const
+    {
+        return Direction(is_outbound).BurstDropRate();
+    }
+
+    [[nodiscard]] int BurstDropLength(bool is_outbound) const
+    {
+        return Direction(is_outbound).BurstDropLength();
+    }
+
     [[nodiscard]] float DropRate(bool is_outbound) const
     {
         return Direction(is_outbound).DropRate();
@@ -151,6 +207,21 @@ public:
     void SetDelayJitterMs(bool is_outbound, int delay_jitter_ms)
     {
         Direction(is_outbound).SetDelayJitterMs(delay_jitter_ms);
+    }
+
+    void SetBurstDropEnabled(bool is_outbound, bool enabled)
+    {
+        Direction(is_outbound).SetBurstDropEnabled(enabled);
+    }
+
+    void SetBurstDropRate(bool is_outbound, float burst_drop_rate)
+    {
+        Direction(is_outbound).SetBurstDropRate(burst_drop_rate);
+    }
+
+    void SetBurstDropLength(bool is_outbound, int burst_drop_length)
+    {
+        Direction(is_outbound).SetBurstDropLength(burst_drop_length);
     }
 
     void SetDropRate(bool is_outbound, float drop_rate)

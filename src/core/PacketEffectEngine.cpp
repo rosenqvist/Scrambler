@@ -1,5 +1,12 @@
 #include "core/PacketEffectEngine.h"
 
+#include "core/EffectConfig.h"
+#include "core/PacketData.h"
+
+#include <chrono>
+#include <cstddef>
+#include <random>
+
 namespace scrambler::core
 {
 
@@ -43,7 +50,30 @@ PacketEffectEmission DirectionPacketEffectEngine::Process(OwnedPacket packet, st
     const DirectionEffectSnapshot snapshot = config_->Snapshot();
 
     PacketEffectEmission emission;
-    if (ShouldDrop(snapshot.drop_rate, rng_))
+    if (!snapshot.burst_drop_enabled)
+    {
+        burst_packets_remaining_ = 0;
+    }
+    else
+    {
+        if (burst_packets_remaining_ > 0)
+        {
+            --burst_packets_remaining_;
+            emission.applied_effects |= ToMask(PacketEffectKind::kDrop);
+            emission.applied_effects |= ToMask(PacketEffectKind::kBurstDrop);
+            return emission;
+        }
+
+        if (ShouldApplyRate(snapshot.burst_drop_rate, rng_))
+        {
+            burst_packets_remaining_ = snapshot.burst_drop_length - 1;
+            emission.applied_effects |= ToMask(PacketEffectKind::kDrop);
+            emission.applied_effects |= ToMask(PacketEffectKind::kBurstDrop);
+            return emission;
+        }
+    }
+
+    if (!snapshot.burst_drop_enabled && ShouldDrop(snapshot.drop_rate, rng_))
     {
         emission.applied_effects |= ToMask(PacketEffectKind::kDrop);
         return emission;
