@@ -9,6 +9,7 @@ using scrambler::core::kDefaultDuplicateCopies;
 using scrambler::core::kMaxDelayJitterMs;
 using scrambler::core::kMaxBurstDropLength;
 using scrambler::core::kMaxDuplicateCopies;
+using scrambler::core::kMaxThrottleKBytesPerSec;
 
 //  Delays
 
@@ -52,6 +53,14 @@ TEST(EffectConfigTest, DefaultDelayJitterIsZero)
     EXPECT_EQ(effects.DelayJitter(false).count(), 0);
 }
 
+TEST(EffectConfigTest, DefaultThrottleIsZero)
+{
+    EffectConfig effects;
+
+    EXPECT_EQ(effects.ThrottleKBytesPerSec(true), 0);
+    EXPECT_EQ(effects.ThrottleKBytesPerSec(false), 0);
+}
+
 TEST(EffectConfigTest, DelayJitterCanDifferByDirection)
 {
     EffectConfig effects;
@@ -70,6 +79,26 @@ TEST(EffectConfigTest, DelayJitterIsClampedToSupportedMaximum)
 
     EXPECT_EQ(effects.DelayJitter(true).count(), kMaxDelayJitterMs);
     EXPECT_EQ(effects.DelayJitter(false).count(), 0);
+}
+
+TEST(EffectConfigTest, ThrottleCanDifferByDirection)
+{
+    EffectConfig effects;
+    effects.SetThrottleKBytesPerSec(true, 256);
+    effects.SetThrottleKBytesPerSec(false, 1024);
+
+    EXPECT_EQ(effects.ThrottleKBytesPerSec(true), 256);
+    EXPECT_EQ(effects.ThrottleKBytesPerSec(false), 1024);
+}
+
+TEST(EffectConfigTest, ThrottleIsClampedToSupportedMaximum)
+{
+    EffectConfig effects;
+    effects.SetThrottleKBytesPerSec(true, kMaxThrottleKBytesPerSec + 500);
+    effects.SetThrottleKBytesPerSec(false, -10);
+
+    EXPECT_EQ(effects.ThrottleKBytesPerSec(true), kMaxThrottleKBytesPerSec);
+    EXPECT_EQ(effects.ThrottleKBytesPerSec(false), 0);
 }
 
 // Drop rate
@@ -262,13 +291,15 @@ TEST(EffectConfigTest, DelayAndDropValuesAreIndependentByDirection)
     EXPECT_FLOAT_EQ(effects.DropRate(false), 0.35F);
 }
 
-TEST(EffectConfigTest, DelayJitterBurstDropAndDuplicateValuesAreIndependentByDirection)
+TEST(EffectConfigTest, DelayJitterThrottleBurstDropAndDuplicateValuesAreIndependentByDirection)
 {
     EffectConfig effects;
     effects.SetDelayMs(true, 80);
     effects.SetDelayMs(false, 260);
     effects.SetDelayJitterMs(true, 25);
     effects.SetDelayJitterMs(false, 70);
+    effects.SetThrottleKBytesPerSec(true, 256);
+    effects.SetThrottleKBytesPerSec(false, 1536);
     effects.SetBurstDropEnabled(true, true);
     effects.SetBurstDropEnabled(false, true);
     effects.SetBurstDropRate(true, 0.20F);
@@ -286,6 +317,8 @@ TEST(EffectConfigTest, DelayJitterBurstDropAndDuplicateValuesAreIndependentByDir
     EXPECT_EQ(effects.Delay(false).count(), 260);
     EXPECT_EQ(effects.DelayJitter(true).count(), 25);
     EXPECT_EQ(effects.DelayJitter(false).count(), 70);
+    EXPECT_EQ(effects.ThrottleKBytesPerSec(true), 256);
+    EXPECT_EQ(effects.ThrottleKBytesPerSec(false), 1536);
     EXPECT_TRUE(effects.BurstDropEnabled(true));
     EXPECT_TRUE(effects.BurstDropEnabled(false));
     EXPECT_FLOAT_EQ(effects.BurstDropRate(true), 0.20F);
@@ -300,6 +333,10 @@ TEST(EffectConfigTest, DelayJitterBurstDropAndDuplicateValuesAreIndependentByDir
     EXPECT_EQ(effects.DuplicateCount(false), 5);
     EXPECT_EQ(effects.Snapshot(true).delay_jitter.count(), 25);
     EXPECT_EQ(effects.Snapshot(false).delay_jitter.count(), 70);
+    EXPECT_EQ(effects.Snapshot(true).throttle_kbytes_per_sec, 256);
+    EXPECT_EQ(effects.Snapshot(false).throttle_kbytes_per_sec, 1536);
+    EXPECT_EQ(effects.Snapshot(true).throttle_bytes_per_second, 256ULL * 1024ULL);
+    EXPECT_EQ(effects.Snapshot(false).throttle_bytes_per_second, 1536ULL * 1024ULL);
     EXPECT_TRUE(effects.Snapshot(true).burst_drop_enabled);
     EXPECT_TRUE(effects.Snapshot(false).burst_drop_enabled);
     EXPECT_FLOAT_EQ(effects.Snapshot(true).burst_drop_rate, 0.20F);
@@ -319,6 +356,8 @@ TEST(EffectConfigTest, DefaultsAreInert)
 
     EXPECT_EQ(effects.Direction(true).DelayMs(), 0);
     EXPECT_EQ(effects.Direction(false).DelayMs(), 0);
+    EXPECT_EQ(effects.Direction(true).ThrottleKBytesPerSec(), 0);
+    EXPECT_EQ(effects.Direction(false).ThrottleKBytesPerSec(), 0);
     EXPECT_EQ(effects.Direction(true).DropRate(), 0.0F);
     EXPECT_EQ(effects.Direction(false).DropRate(), 0.0F);
     EXPECT_FALSE(effects.Direction(true).BurstDropEnabled());

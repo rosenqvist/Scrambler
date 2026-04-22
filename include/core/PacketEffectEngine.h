@@ -4,6 +4,7 @@
 #include "core/PacketData.h"
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <random>
 #include <vector>
@@ -52,11 +53,16 @@ public:
     [[nodiscard]] PacketEffectEmission Process(OwnedPacket packet, std::chrono::steady_clock::time_point now);
 
 private:
-    // Stateful per-direction effect memory lives here. Burst loss already uses
-    // this, and throttling/reordering will follow the same pattern.
+    // Per-direction state lives here.
+    [[nodiscard]] static std::chrono::steady_clock::duration TransmissionTimeForPacket(
+        size_t packet_length,
+        std::uint64_t throttle_bytes_per_second);
+
     const DirectionEffectConfig* config_ = nullptr;
     std::mt19937 rng_;
     int burst_packets_remaining_ = 0;
+    std::chrono::steady_clock::time_point next_throttle_release_at_;
+    std::uint64_t last_throttle_bytes_per_second_ = 0;
 };
 
 class PacketEffectEngine

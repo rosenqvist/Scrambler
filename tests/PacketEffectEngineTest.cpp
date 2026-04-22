@@ -3,6 +3,8 @@
 #include "core/PacketEffectEngine.h"
 
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <gtest/gtest.h>
 
 using scrambler::core::EffectConfig;
@@ -26,6 +28,16 @@ OwnedPacket MakePacket(bool is_outbound)
     packet.metadata.pid = 4242;
     packet.metadata.is_outbound = is_outbound;
     return packet;
+}
+
+std::chrono::steady_clock::duration ExpectedTransmissionTime(size_t packet_length, int throttle_kbytes_per_sec)
+{
+    const auto throttle_bytes_per_second = static_cast<std::uint64_t>(throttle_kbytes_per_sec) * 1024ULL;
+    const auto packet_bytes = static_cast<std::uint64_t>(packet_length);
+    const auto transmission_nanos =
+        ((packet_bytes * 1'000'000'000ULL) + throttle_bytes_per_second - 1ULL) / throttle_bytes_per_second;
+    return std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+        std::chrono::nanoseconds(transmission_nanos));
 }
 
 }  // namespace
@@ -152,6 +164,95 @@ TEST(PacketEffectsTest, BurstLossModeSuppressesRandomDropSettings)
     EXPECT_EQ(emission.ScheduledCount(), 0U);
     EXPECT_FALSE(emission.HasEffect(PacketEffectKind::kDrop));
     EXPECT_FALSE(emission.HasEffect(PacketEffectKind::kBurstDrop));
+}
+
+TEST(PacketEffectsTest, ThrottleDelaysLaterPacketsWhenBacklogBuilds)
+{
+    EffectConfig effects;
+    effects.SetThrottleKBytesPerSec(true, 1);
+    PacketEffectEngine engine(effects);
+    const auto transmission_time = ExpectedTransmissionTime(MakePacket(true).length, 1);
+
+    const auto now = std::chrono::steady_clock::time_point{} + std::chrono::milliseconds(250);
+    const auto first = engine.Process(MakePacket(true), now);
+    const auto second = engine.Process(MakePacket(true), now);
+
+    ASSERT_EQ(first.ImmediateCount(), 1U);
+    EXPECT_EQ(first.ScheduledCount(), 0U);
+    EXPECT_FALSE(first.HasEffect(PacketEffectKind::kBandwidthThrottle));
+
+    EXPECT_EQ(second.ImmediateCount(), 0U);
+    ASSERT_EQ(second.ScheduledCount(), 1U);
+    EXPECT_TRUE(second.HasEffect(PacketEffectKind::kBandwidthThrottle));
+    EXPECT_EQ(second.scheduled_packets.at(0).release_at, now + transmission_time);
+}
+
+TEST(PacketEffectsTest, ThrottleStacksOnTopOfDelay)
+{
+    EffectConfig effects;
+    effects.SetDelayMs(true, 50);
+    effects.SetThrottleKBytesPerSec(true, 1);
+    PacketEffectEngine engine(effects);
+    const auto transmission_time = ExpectedTransmissionTime(MakePacket(true).length, 1);
+
+    const auto now = std::chrono::steady_clock::time_point{} + std::chrono::milliseconds(250);
+    const auto first = engine.Process(MakePacket(true), now);
+    const auto second = engine.Process(MakePacket(true), now);
+
+    EXPECT_EQ(first.ImmediateCount(), 0U);
+    ASSERT_EQ(first.ScheduledCount(), 1U);
+    EXPECT_TRUE(first.HasEffect(PacketEffectKind::kDelay));
+    EXPECT_FALSE(first.HasEffect(PacketEffectKind::kBandwidthThrottle));
+    EXPECT_EQ(first.scheduled_packets.at(0).release_at, now + std::chrono::milliseconds(50));
+
+    EXPECT_EQ(second.ImmediateCount(), 0U);
+    ASSERT_EQ(second.ScheduledCount(), 1U);
+    EXPECT_TRUE(second.HasEffect(PacketEffectKind::kDelay));
+    EXPECT_TRUE(second.HasEffect(PacketEffectKind::kBandwidthThrottle));
+    EXPECT_EQ(second.scheduled_packets.at(0).release_at, now + std::chrono::milliseconds(50) + transmission_time);
+}
+
+TEST(PacketEffectsTest, ReEnablingThrottleClearsPreviousBacklog)
+{
+    EffectConfig effects;
+    effects.SetThrottleKBytesPerSec(true, 1);
+    PacketEffectEngine engine(effects);
+
+    const auto now = std::chrono::steady_clock::time_point{} + std::chrono::milliseconds(250);
+    const auto first = engine.Process(MakePacket(true), now);
+    const auto second = engine.Process(MakePacket(true), now);
+
+    ASSERT_EQ(first.ImmediateCount(), 1U);
+    ASSERT_EQ(second.ScheduledCount(), 1U);
+
+    effects.SetThrottleKBytesPerSec(true, 0);
+    effects.SetThrottleKBytesPerSec(true, 1);
+
+    const auto third = engine.Process(MakePacket(true), now);
+
+    EXPECT_EQ(third.ImmediateCount(), 1U);
+    EXPECT_EQ(third.ScheduledCount(), 0U);
+    EXPECT_FALSE(third.HasEffect(PacketEffectKind::kBandwidthThrottle));
+}
+
+TEST(PacketEffectsTest, ThrottleSpreadsDuplicatedCopiesOverTime)
+{
+    EffectConfig effects;
+    effects.SetThrottleKBytesPerSec(true, 1);
+    effects.SetDuplicateRate(true, 1.0F);
+    effects.SetDuplicateCount(true, 2);
+    PacketEffectEngine engine(effects);
+    const auto transmission_time = ExpectedTransmissionTime(MakePacket(true).length, 1);
+
+    const auto now = std::chrono::steady_clock::time_point{} + std::chrono::milliseconds(250);
+    const auto emission = engine.Process(MakePacket(true), now);
+
+    ASSERT_EQ(emission.ImmediateCount(), 1U);
+    ASSERT_EQ(emission.ScheduledCount(), 2U);
+    EXPECT_TRUE(emission.HasEffect(PacketEffectKind::kDuplicate));
+    EXPECT_TRUE(emission.HasEffect(PacketEffectKind::kBandwidthThrottle));
+    EXPECT_EQ(emission.scheduled_packets.at(0).release_at, now + transmission_time);
+    EXPECT_EQ(emission.scheduled_packets.at(1).release_at, now + (transmission_time * 2));
 }
 
 TEST(PacketEffectsTest, SendsOneExtraCopyByDefaultWhenDuplicationIsEnabled)

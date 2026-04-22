@@ -47,7 +47,6 @@
 #include <utility>
 #include <vector>
 
-
 namespace scrambler::ui
 {
 
@@ -265,6 +264,21 @@ void MainWindow::SetupUi()
                               inbound_jitter_slider_,
                               inbound_jitter_spinbox_);
     effects_layout->addWidget(jitter_asymmetric_controls_);
+
+    effects_layout->addLayout(make_primary_effect_row("Throttle:",
+                                                      core::kMaxThrottleKBytesPerSec,
+                                                      " KB/s",
+                                                      throttle_slider_,
+                                                      throttle_spinbox_,
+                                                      throttle_asymmetric_checkbox_));
+    make_directional_controls(throttle_asymmetric_controls_,
+                              core::kMaxThrottleKBytesPerSec,
+                              " KB/s",
+                              outbound_throttle_slider_,
+                              outbound_throttle_spinbox_,
+                              inbound_throttle_slider_,
+                              inbound_throttle_spinbox_);
+    effects_layout->addWidget(throttle_asymmetric_controls_);
 
     auto* drop_row =
         make_primary_effect_row("Drop:", 100, " %", drop_slider_, drop_spinbox_, drop_asymmetric_checkbox_);
@@ -530,6 +544,9 @@ void MainWindow::SetupUi()
     connect_slider_pair(inbound_delay_slider_, inbound_delay_spinbox_);
     connect_slider_pair(outbound_jitter_slider_, outbound_jitter_spinbox_);
     connect_slider_pair(inbound_jitter_slider_, inbound_jitter_spinbox_);
+    connect_slider_pair(throttle_slider_, throttle_spinbox_);
+    connect_slider_pair(outbound_throttle_slider_, outbound_throttle_spinbox_);
+    connect_slider_pair(inbound_throttle_slider_, inbound_throttle_spinbox_);
     connect_slider_pair(outbound_drop_slider_, outbound_drop_spinbox_);
     connect_slider_pair(inbound_drop_slider_, inbound_drop_spinbox_);
     connect_slider_pair(burst_drop_chance_slider_, burst_drop_chance_spinbox_);
@@ -617,6 +634,17 @@ void MainWindow::SetupUi()
         sync_slider_value(inbound_jitter_slider_, value);
     });
 
+    connect(throttle_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this, sync_slider_value](int value)
+    {
+        effects_.SetThrottleKBytesPerSec(true, value);
+        effects_.SetThrottleKBytesPerSec(false, value);
+        sync_slider_value(outbound_throttle_slider_, value);
+        sync_slider_value(inbound_throttle_slider_, value);
+    });
+
     connect(outbound_delay_slider_,
             &QSlider::valueChanged,
             this,
@@ -647,6 +675,22 @@ void MainWindow::SetupUi()
             [this](int value)
     {
         effects_.SetDelayJitterMs(false, value);
+    });
+
+    connect(outbound_throttle_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this](int value)
+    {
+        effects_.SetThrottleKBytesPerSec(true, value);
+    });
+
+    connect(inbound_throttle_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this](int value)
+    {
+        effects_.SetThrottleKBytesPerSec(false, value);
     });
 
     connect(outbound_drop_slider_,
@@ -912,6 +956,27 @@ void MainWindow::SetupUi()
         jitter_slider_->setEnabled(!checked);
         jitter_spinbox_->setEnabled(!checked);
         jitter_asymmetric_controls_->setVisible(checked);
+    });
+
+    connect(throttle_asymmetric_checkbox_,
+            &QCheckBox::toggled,
+            this,
+            [this](bool checked)
+    {
+        if (checked)
+        {
+            const int shared_value = throttle_slider_->value();
+            outbound_throttle_slider_->setValue(shared_value);
+            inbound_throttle_slider_->setValue(shared_value);
+        }
+        else
+        {
+            throttle_slider_->setValue(outbound_throttle_slider_->value());
+        }
+
+        throttle_slider_->setEnabled(!checked);
+        throttle_spinbox_->setEnabled(!checked);
+        throttle_asymmetric_controls_->setVisible(checked);
     });
 
     connect(duplicate_asymmetric_checkbox_,

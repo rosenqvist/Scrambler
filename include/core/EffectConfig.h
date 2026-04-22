@@ -16,12 +16,15 @@ inline constexpr int kMaxDuplicateCopies = 64;
 inline constexpr int kMaxDelayJitterMs = 1000;
 inline constexpr int kDefaultBurstDropLength = 3;
 inline constexpr int kMaxBurstDropLength = 32;
+inline constexpr int kMaxThrottleKBytesPerSec = 10240;
 
 struct DirectionEffectSnapshot
 {
     std::chrono::milliseconds delay{0};
     std::chrono::milliseconds delay_jitter{0};
     int delay_jitter_ms = 0;
+    int throttle_kbytes_per_sec = 0;
+    std::uint64_t throttle_bytes_per_second = 0;
     bool burst_drop_enabled = false;
     float burst_drop_rate = 0.0F;
     int burst_drop_length = kDefaultBurstDropLength;
@@ -38,6 +41,8 @@ public:
         return {.delay = std::chrono::milliseconds(DelayMs()),
                 .delay_jitter = std::chrono::milliseconds(DelayJitterMs()),
                 .delay_jitter_ms = DelayJitterMs(),
+                .throttle_kbytes_per_sec = ThrottleKBytesPerSec(),
+                .throttle_bytes_per_second = ThrottleBytesPerSecond(),
                 .burst_drop_enabled = BurstDropEnabled(),
                 .burst_drop_rate = BurstDropRate(),
                 .burst_drop_length = BurstDropLength(),
@@ -74,6 +79,22 @@ public:
     void SetDelayJitterMs(int delay_jitter_ms)
     {
         delay_jitter_ms_.store(std::clamp(delay_jitter_ms, 0, kMaxDelayJitterMs), std::memory_order_relaxed);
+    }
+
+    [[nodiscard]] int ThrottleKBytesPerSec() const
+    {
+        return throttle_kbytes_per_sec_.load(std::memory_order_relaxed);
+    }
+
+    [[nodiscard]] std::uint64_t ThrottleBytesPerSecond() const
+    {
+        return static_cast<std::uint64_t>(ThrottleKBytesPerSec()) * 1024ULL;
+    }
+
+    void SetThrottleKBytesPerSec(int throttle_kbytes_per_sec)
+    {
+        throttle_kbytes_per_sec_.store(std::clamp(throttle_kbytes_per_sec, 0, kMaxThrottleKBytesPerSec),
+                                       std::memory_order_relaxed);
     }
 
     [[nodiscard]] bool BurstDropEnabled() const
@@ -140,6 +161,7 @@ public:
 private:
     std::atomic<int> delay_ms_{0};
     std::atomic<int> delay_jitter_ms_{0};
+    std::atomic<int> throttle_kbytes_per_sec_{0};
     std::atomic<bool> burst_drop_enabled_{false};
     std::atomic<float> burst_drop_rate_{0.0F};
     std::atomic<int> burst_drop_length_{kDefaultBurstDropLength};
@@ -167,6 +189,11 @@ public:
     [[nodiscard]] std::chrono::milliseconds DelayJitter(bool is_outbound) const
     {
         return Direction(is_outbound).DelayJitter();
+    }
+
+    [[nodiscard]] int ThrottleKBytesPerSec(bool is_outbound) const
+    {
+        return Direction(is_outbound).ThrottleKBytesPerSec();
     }
 
     [[nodiscard]] bool BurstDropEnabled(bool is_outbound) const
@@ -207,6 +234,11 @@ public:
     void SetDelayJitterMs(bool is_outbound, int delay_jitter_ms)
     {
         Direction(is_outbound).SetDelayJitterMs(delay_jitter_ms);
+    }
+
+    void SetThrottleKBytesPerSec(bool is_outbound, int throttle_kbytes_per_sec)
+    {
+        Direction(is_outbound).SetThrottleKBytesPerSec(throttle_kbytes_per_sec);
     }
 
     void SetBurstDropEnabled(bool is_outbound, bool enabled)
@@ -281,32 +313,32 @@ class TargetSet
 public:
     void Add(uint32_t pid)
     {
-        std::lock_guard lock(mutex_);
+        const std::scoped_lock lock(mutex_);
         pids_.insert(pid);
     }
 
     void Remove(uint32_t pid)
     {
-        std::lock_guard lock(mutex_);
+        const std::scoped_lock lock(mutex_);
         pids_.erase(pid);
     }
 
     void Clear()
     {
-        std::lock_guard lock(mutex_);
+        const std::scoped_lock lock(mutex_);
         pids_.clear();
     }
 
     void SetSingle(uint32_t pid)
     {
-        std::lock_guard lock(mutex_);
+        const std::scoped_lock lock(mutex_);
         pids_.clear();
         pids_.insert(pid);
     }
 
     bool Contains(uint32_t pid) const
     {
-        std::lock_guard lock(mutex_);
+        const std::scoped_lock lock(mutex_);
         return pids_.contains(pid);
     }
 

@@ -27,7 +27,6 @@
 #include <utility>
 #include <vector>
 
-
 namespace scrambler::core
 {
 
@@ -307,15 +306,21 @@ void PacketInterceptor::CaptureLoop()
                                                    : Counter::kPacketsDroppedInbound);
                         }
 
-                        if (emission.HasEffect(PacketEffectKind::kDelay) && emission.ScheduledCount() > 0)
+                        if (emission.ScheduledCount() > 0)
                         {
 #ifndef NDEBUG
                             const auto scheduled_delay =
-                                (std::max) (std::chrono::duration_cast<std::chrono::milliseconds>(
-                                                emission.scheduled_packets.front().release_at - now),
-                                            std::chrono::milliseconds::zero());
+                                (std::max)(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                               emission.scheduled_packets.front().release_at - now),
+                                           std::chrono::milliseconds::zero());
                             auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
-                            DEBUG_PRINT("[DELAY] PID {:>5} | {}:{} -> {}:{} ({} bytes) +{}ms{}",
+                            const char* schedule_label = emission.HasEffect(PacketEffectKind::kBandwidthThrottle)
+                                                                 && !emission.HasEffect(PacketEffectKind::kDelay)
+                                                                 && !emission.HasEffect(PacketEffectKind::kDelayJitter)
+                                                             ? "THRTL"
+                                                             : "DELAY";
+                            DEBUG_PRINT("[{}] PID {:>5} | {}:{} -> {}:{} ({} bytes) +{}ms{}{}",
+                                        schedule_label,
                                         pid,
                                         addrs.src.data(),
                                         tuple.src_port,
@@ -323,7 +328,8 @@ void PacketInterceptor::CaptureLoop()
                                         tuple.dst_port,
                                         pkt_len,
                                         scheduled_delay.count(),
-                                        emission.HasEffect(PacketEffectKind::kDelayJitter) ? " [jitter]" : "");
+                                        emission.HasEffect(PacketEffectKind::kDelayJitter) ? " [jitter]" : "",
+                                        emission.HasEffect(PacketEffectKind::kBandwidthThrottle) ? " [throttle]" : "");
 #endif
                             CountEvent(is_outbound ? Counter::kPacketsDelayedOutbound
                                                    : Counter::kPacketsDelayedInbound);

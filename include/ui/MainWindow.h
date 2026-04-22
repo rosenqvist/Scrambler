@@ -93,6 +93,14 @@ private:  // NOLINT(readability-redundant-access-specifiers)
     QSpinBox* outbound_jitter_spinbox_ = nullptr;
     QSlider* inbound_jitter_slider_ = nullptr;
     QSpinBox* inbound_jitter_spinbox_ = nullptr;
+    QSlider* throttle_slider_ = nullptr;
+    QSpinBox* throttle_spinbox_ = nullptr;
+    QCheckBox* throttle_asymmetric_checkbox_ = nullptr;
+    QWidget* throttle_asymmetric_controls_ = nullptr;
+    QSlider* outbound_throttle_slider_ = nullptr;
+    QSpinBox* outbound_throttle_spinbox_ = nullptr;
+    QSlider* inbound_throttle_slider_ = nullptr;
+    QSpinBox* inbound_throttle_spinbox_ = nullptr;
     QSlider* drop_slider_ = nullptr;
     QSpinBox* drop_spinbox_ = nullptr;
     QCheckBox* drop_asymmetric_checkbox_ = nullptr;
