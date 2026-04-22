@@ -289,18 +289,19 @@ void PacketInterceptor::CaptureLoop()
                         {
 #ifndef NDEBUG
                             const auto scheduled_delay =
-                                (std::max) (std::chrono::duration_cast<std::chrono::milliseconds>(
-                                                emission.scheduled_packets.front().release_at - now),
-                                            std::chrono::milliseconds::zero());
+                                (std::max)(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                               emission.scheduled_packets.front().release_at - now),
+                                           std::chrono::milliseconds::zero());
                             auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
-                            DEBUG_PRINT("[DELAY] PID {:>5} | {}:{} -> {}:{} ({} bytes) +{}ms",
+                            DEBUG_PRINT("[DELAY] PID {:>5} | {}:{} -> {}:{} ({} bytes) +{}ms{}",
                                         pid,
                                         addrs.src.data(),
                                         tuple.src_port,
                                         addrs.dst.data(),
                                         tuple.dst_port,
                                         pkt_len,
-                                        scheduled_delay.count());
+                                        scheduled_delay.count(),
+                                        emission.HasEffect(PacketEffectKind::kDelayJitter) ? " [jitter]" : "");
 #endif
                             CountEvent(is_outbound ? Counter::kPacketsDelayedOutbound
                                                    : Counter::kPacketsDelayedInbound);

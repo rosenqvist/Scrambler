@@ -60,6 +60,45 @@ TEST(PacketEffectsTest, SchedulesPacketForLaterWhenDelayIsEnabled)
     EXPECT_EQ(emission.scheduled_packets[0].packet.data[3], 0xDD);
 }
 
+TEST(PacketEffectsTest, AddsJitterOnTopOfConfiguredDelay)
+{
+    EffectConfig effects;
+    effects.SetDelayMs(true, 120);
+    effects.SetDelayJitterMs(true, 30);
+    PacketEffectEngine engine(effects);
+
+    const auto now = std::chrono::steady_clock::time_point{} + std::chrono::milliseconds(250);
+    const auto emission = engine.Process(MakePacket(true), now);
+    const auto scheduled_delay =
+        std::chrono::duration_cast<std::chrono::milliseconds>(emission.scheduled_packets[0].release_at - now);
+
+    EXPECT_EQ(emission.ImmediateCount(), 0U);
+    ASSERT_EQ(emission.ScheduledCount(), 1U);
+    EXPECT_TRUE(emission.HasEffect(PacketEffectKind::kDelay));
+    EXPECT_TRUE(emission.HasEffect(PacketEffectKind::kDelayJitter));
+    EXPECT_GE(scheduled_delay.count(), 120);
+    EXPECT_LE(scheduled_delay.count(), 150);
+}
+
+TEST(PacketEffectsTest, SchedulesPacketForLaterWhenJitterIsEnabled)
+{
+    EffectConfig effects;
+    effects.SetDelayJitterMs(true, 40);
+    PacketEffectEngine engine(effects);
+
+    const auto now = std::chrono::steady_clock::time_point{} + std::chrono::milliseconds(250);
+    const auto emission = engine.Process(MakePacket(true), now);
+    const auto scheduled_delay =
+        std::chrono::duration_cast<std::chrono::milliseconds>(emission.scheduled_packets[0].release_at - now);
+
+    EXPECT_EQ(emission.ImmediateCount(), 0U);
+    ASSERT_EQ(emission.ScheduledCount(), 1U);
+    EXPECT_FALSE(emission.HasEffect(PacketEffectKind::kDelay));
+    EXPECT_TRUE(emission.HasEffect(PacketEffectKind::kDelayJitter));
+    EXPECT_GE(scheduled_delay.count(), 0);
+    EXPECT_LE(scheduled_delay.count(), 40);
+}
+
 TEST(PacketEffectsTest, SendsOneExtraCopyByDefaultWhenDuplicationIsEnabled)
 {
     EffectConfig effects;
@@ -110,6 +149,31 @@ TEST(PacketEffectsTest, SchedulesConfiguredNumberOfCopiesWhenDelayAndDuplication
     EXPECT_EQ(emission.scheduled_packets[3].release_at, now + std::chrono::milliseconds(150));
     EXPECT_EQ(emission.scheduled_packets[0].packet.data[3], 0xDD);
     EXPECT_EQ(emission.scheduled_packets[3].packet.data[3], 0xDD);
+}
+
+TEST(PacketEffectsTest, AppliesTheSameJitteredReleaseTimeToAllDuplicatedCopies)
+{
+    EffectConfig effects;
+    effects.SetDelayMs(true, 150);
+    effects.SetDelayJitterMs(true, 25);
+    effects.SetDuplicateRate(true, 1.0F);
+    effects.SetDuplicateCount(true, 2);
+    PacketEffectEngine engine(effects);
+
+    const auto now = std::chrono::steady_clock::time_point{} + std::chrono::milliseconds(250);
+    const auto emission = engine.Process(MakePacket(true), now);
+    const auto scheduled_delay =
+        std::chrono::duration_cast<std::chrono::milliseconds>(emission.scheduled_packets[0].release_at - now);
+
+    EXPECT_EQ(emission.ImmediateCount(), 0U);
+    ASSERT_EQ(emission.ScheduledCount(), 3U);
+    EXPECT_TRUE(emission.HasEffect(PacketEffectKind::kDelay));
+    EXPECT_TRUE(emission.HasEffect(PacketEffectKind::kDelayJitter));
+    EXPECT_TRUE(emission.HasEffect(PacketEffectKind::kDuplicate));
+    EXPECT_EQ(emission.scheduled_packets[1].release_at, emission.scheduled_packets[0].release_at);
+    EXPECT_EQ(emission.scheduled_packets[2].release_at, emission.scheduled_packets[0].release_at);
+    EXPECT_GE(scheduled_delay.count(), 150);
+    EXPECT_LE(scheduled_delay.count(), 175);
 }
 
 TEST(PacketEffectsTest, DropsPacketWhenDropRateIsOneHundredPercent)

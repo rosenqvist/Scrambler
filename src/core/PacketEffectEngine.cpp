@@ -5,7 +5,7 @@ namespace scrambler::core
 
 void PacketEffectEmission::AddImmediate(OwnedPacket packet)
 {
-    immediate_packets.push_back((packet));
+    immediate_packets.push_back(packet);
 }
 
 void PacketEffectEmission::AddScheduled(OwnedPacket packet, std::chrono::steady_clock::time_point release_at)
@@ -56,10 +56,23 @@ PacketEffectEmission DirectionPacketEffectEngine::Process(OwnedPacket packet, st
         emission.applied_effects |= ToMask(PacketEffectKind::kDuplicate);
     }
 
-    if (snapshot.delay.count() > 0)
+    const bool has_base_delay = snapshot.delay.count() > 0;
+    const bool has_jitter = snapshot.delay_jitter_ms > 0;
+    if (has_base_delay || has_jitter)
     {
-        emission.applied_effects |= ToMask(PacketEffectKind::kDelay);
-        const auto release_at = now + snapshot.delay;
+        auto scheduled_delay = snapshot.delay;
+        if (has_base_delay)
+        {
+            emission.applied_effects |= ToMask(PacketEffectKind::kDelay);
+        }
+        if (has_jitter)
+        {
+            const int jitter_ms = std::uniform_int_distribution<int>(0, snapshot.delay_jitter_ms)(rng_);
+            scheduled_delay += std::chrono::milliseconds(jitter_ms);
+            emission.applied_effects |= ToMask(PacketEffectKind::kDelayJitter);
+        }
+
+        const auto release_at = now + scheduled_delay;
         emission.scheduled_packets.reserve(total_copy_count);
         for (size_t copy_index = 0; copy_index < total_copy_count; ++copy_index)
         {

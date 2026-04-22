@@ -226,6 +226,17 @@ void MainWindow::SetupUi()
                               inbound_delay_spinbox_);
     effects_layout->addWidget(delay_asymmetric_controls_);
 
+    effects_layout->addLayout(make_primary_effect_row(
+        "Jitter:", core::kMaxDelayJitterMs, " ms", jitter_slider_, jitter_spinbox_, jitter_asymmetric_checkbox_));
+    make_directional_controls(jitter_asymmetric_controls_,
+                              core::kMaxDelayJitterMs,
+                              " ms",
+                              outbound_jitter_slider_,
+                              outbound_jitter_spinbox_,
+                              inbound_jitter_slider_,
+                              inbound_jitter_spinbox_);
+    effects_layout->addWidget(jitter_asymmetric_controls_);
+
     effects_layout->addLayout(
         make_primary_effect_row("Drop:", 100, " %", drop_slider_, drop_spinbox_, drop_asymmetric_checkbox_));
     make_directional_controls(drop_asymmetric_controls_,
@@ -439,9 +450,12 @@ void MainWindow::SetupUi()
     };
 
     connect_slider_pair(delay_slider_, delay_spinbox_);
+    connect_slider_pair(jitter_slider_, jitter_spinbox_);
     connect_slider_pair(drop_slider_, drop_spinbox_);
     connect_slider_pair(outbound_delay_slider_, outbound_delay_spinbox_);
     connect_slider_pair(inbound_delay_slider_, inbound_delay_spinbox_);
+    connect_slider_pair(outbound_jitter_slider_, outbound_jitter_spinbox_);
+    connect_slider_pair(inbound_jitter_slider_, inbound_jitter_spinbox_);
     connect_slider_pair(outbound_drop_slider_, outbound_drop_spinbox_);
     connect_slider_pair(inbound_drop_slider_, inbound_drop_spinbox_);
     connect_slider_pair(duplicate_slider_, duplicate_spinbox_);
@@ -493,6 +507,17 @@ void MainWindow::SetupUi()
         sync_slider_value(inbound_drop_slider_, value);
     });
 
+    connect(jitter_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this, sync_slider_value](int value)
+    {
+        effects_.SetDelayJitterMs(true, value);
+        effects_.SetDelayJitterMs(false, value);
+        sync_slider_value(outbound_jitter_slider_, value);
+        sync_slider_value(inbound_jitter_slider_, value);
+    });
+
     connect(outbound_delay_slider_,
             &QSlider::valueChanged,
             this,
@@ -507,6 +532,22 @@ void MainWindow::SetupUi()
             [this](int value)
     {
         effects_.SetDelayMs(false, value);
+    });
+
+    connect(outbound_jitter_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this](int value)
+    {
+        effects_.SetDelayJitterMs(true, value);
+    });
+
+    connect(inbound_jitter_slider_,
+            &QSlider::valueChanged,
+            this,
+            [this](int value)
+    {
+        effects_.SetDelayJitterMs(false, value);
     });
 
     connect(outbound_drop_slider_,
@@ -663,6 +704,27 @@ void MainWindow::SetupUi()
         drop_slider_->setEnabled(!checked);
         drop_spinbox_->setEnabled(!checked);
         drop_asymmetric_controls_->setVisible(checked);
+    });
+
+    connect(jitter_asymmetric_checkbox_,
+            &QCheckBox::toggled,
+            this,
+            [this](bool checked)
+    {
+        if (checked)
+        {
+            const int shared_value = jitter_slider_->value();
+            outbound_jitter_slider_->setValue(shared_value);
+            inbound_jitter_slider_->setValue(shared_value);
+        }
+        else
+        {
+            jitter_slider_->setValue(outbound_jitter_slider_->value());
+        }
+
+        jitter_slider_->setEnabled(!checked);
+        jitter_spinbox_->setEnabled(!checked);
+        jitter_asymmetric_controls_->setVisible(checked);
     });
 
     connect(duplicate_asymmetric_checkbox_,

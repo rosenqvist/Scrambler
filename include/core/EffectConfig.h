@@ -13,10 +13,13 @@ namespace scrambler::core
 
 inline constexpr int kDefaultDuplicateCopies = 1;
 inline constexpr int kMaxDuplicateCopies = 64;
+inline constexpr int kMaxDelayJitterMs = 1000;
 
 struct DirectionEffectSnapshot
 {
     std::chrono::milliseconds delay{0};
+    std::chrono::milliseconds delay_jitter{0};
+    int delay_jitter_ms = 0;
     float drop_rate = 0.0F;
     float duplicate_rate = 0.0F;
     int duplicate_count = kDefaultDuplicateCopies;
@@ -28,6 +31,8 @@ public:
     [[nodiscard]] DirectionEffectSnapshot Snapshot() const
     {
         return {.delay = std::chrono::milliseconds(DelayMs()),
+                .delay_jitter = std::chrono::milliseconds(DelayJitterMs()),
+                .delay_jitter_ms = DelayJitterMs(),
                 .drop_rate = DropRate(),
                 .duplicate_rate = DuplicateRate(),
                 .duplicate_count = DuplicateCount()};
@@ -45,7 +50,22 @@ public:
 
     void SetDelayMs(int delay_ms)
     {
-        delay_ms_.store((std::max) (delay_ms, 0), std::memory_order_relaxed);
+        delay_ms_.store((std::max)(delay_ms, 0), std::memory_order_relaxed);
+    }
+
+    [[nodiscard]] int DelayJitterMs() const
+    {
+        return delay_jitter_ms_.load(std::memory_order_relaxed);
+    }
+
+    [[nodiscard]] std::chrono::milliseconds DelayJitter() const
+    {
+        return std::chrono::milliseconds(DelayJitterMs());
+    }
+
+    void SetDelayJitterMs(int delay_jitter_ms)
+    {
+        delay_jitter_ms_.store(std::clamp(delay_jitter_ms, 0, kMaxDelayJitterMs), std::memory_order_relaxed);
     }
 
     [[nodiscard]] float DropRate() const
@@ -81,6 +101,7 @@ public:
 
 private:
     std::atomic<int> delay_ms_{0};
+    std::atomic<int> delay_jitter_ms_{0};
     std::atomic<float> drop_rate_{0.0F};
     std::atomic<float> duplicate_rate_{0.0F};
     std::atomic<int> duplicate_count_{kDefaultDuplicateCopies};
@@ -102,6 +123,11 @@ public:
         return Direction(is_outbound).Delay();
     }
 
+    [[nodiscard]] std::chrono::milliseconds DelayJitter(bool is_outbound) const
+    {
+        return Direction(is_outbound).DelayJitter();
+    }
+
     [[nodiscard]] float DropRate(bool is_outbound) const
     {
         return Direction(is_outbound).DropRate();
@@ -120,6 +146,11 @@ public:
     void SetDelayMs(bool is_outbound, int delay_ms)
     {
         Direction(is_outbound).SetDelayMs(delay_ms);
+    }
+
+    void SetDelayJitterMs(bool is_outbound, int delay_jitter_ms)
+    {
+        Direction(is_outbound).SetDelayJitterMs(delay_jitter_ms);
     }
 
     void SetDropRate(bool is_outbound, float drop_rate)

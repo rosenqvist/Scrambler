@@ -3,7 +3,6 @@
 #include "core/Diagnostics.h"
 
 #include <timeapi.h>
-#include <utility>
 
 namespace scrambler::core
 {
@@ -91,7 +90,7 @@ void DelayQueue::Push(ScheduledPacket packet)
 
     ScheduledPacket* slot = *free_pkt_ptr;
     free_queue_.pop();
-    *slot = std::move(packet);
+    *slot = packet;
     handoff_queue_.push(slot);
 }
 
@@ -152,7 +151,7 @@ void DelayQueue::DrainLoop()
         {
             std::memcpy(send_buf.data() + send_len, packet->packet.data.data(), packet->packet.length);
             send_addrs[send_count] = packet->packet.addr;
-            ready_packets[send_count] = packet;
+            ready_packets.at(static_cast<size_t>(send_count)) = packet;
             send_len += packet->packet.length;
             ++send_count;
         });
@@ -185,7 +184,7 @@ void DelayQueue::DrainLoop()
 
             for (UINT i = 0; i < send_count; ++i)
             {
-                free_queue_.push(ready_packets[i]);
+                free_queue_.push(ready_packets.at(static_cast<size_t>(i)));
             }
         }
 

@@ -5,6 +5,7 @@
 using scrambler::core::EffectConfig;
 using scrambler::core::ShouldDrop;
 using scrambler::core::kDefaultDuplicateCopies;
+using scrambler::core::kMaxDelayJitterMs;
 using scrambler::core::kMaxDuplicateCopies;
 
 //  Delays
@@ -39,6 +40,34 @@ TEST(EffectConfigTest, DelayCanBeUpdatedAtRuntime)
     effects.SetDelayMs(false, 350);
     EXPECT_EQ(effects.Delay(true).count(), 500);
     EXPECT_EQ(effects.Delay(false).count(), 350);
+}
+
+TEST(EffectConfigTest, DefaultDelayJitterIsZero)
+{
+    EffectConfig effects;
+
+    EXPECT_EQ(effects.DelayJitter(true).count(), 0);
+    EXPECT_EQ(effects.DelayJitter(false).count(), 0);
+}
+
+TEST(EffectConfigTest, DelayJitterCanDifferByDirection)
+{
+    EffectConfig effects;
+    effects.SetDelayJitterMs(true, 35);
+    effects.SetDelayJitterMs(false, 90);
+
+    EXPECT_EQ(effects.DelayJitter(true).count(), 35);
+    EXPECT_EQ(effects.DelayJitter(false).count(), 90);
+}
+
+TEST(EffectConfigTest, DelayJitterIsClampedToSupportedMaximum)
+{
+    EffectConfig effects;
+    effects.SetDelayJitterMs(true, kMaxDelayJitterMs + 50);
+    effects.SetDelayJitterMs(false, -10);
+
+    EXPECT_EQ(effects.DelayJitter(true).count(), kMaxDelayJitterMs);
+    EXPECT_EQ(effects.DelayJitter(false).count(), 0);
 }
 
 // Drop rate
@@ -191,11 +220,13 @@ TEST(EffectConfigTest, DelayAndDropValuesAreIndependentByDirection)
     EXPECT_FLOAT_EQ(effects.DropRate(false), 0.35F);
 }
 
-TEST(EffectConfigTest, DelayDropAndDuplicateValuesAreIndependentByDirection)
+TEST(EffectConfigTest, DelayJitterDropAndDuplicateValuesAreIndependentByDirection)
 {
     EffectConfig effects;
     effects.SetDelayMs(true, 80);
     effects.SetDelayMs(false, 260);
+    effects.SetDelayJitterMs(true, 25);
+    effects.SetDelayJitterMs(false, 70);
     effects.SetDropRate(true, 0.10F);
     effects.SetDropRate(false, 0.35F);
     effects.SetDuplicateRate(true, 0.15F);
@@ -205,12 +236,16 @@ TEST(EffectConfigTest, DelayDropAndDuplicateValuesAreIndependentByDirection)
 
     EXPECT_EQ(effects.Delay(true).count(), 80);
     EXPECT_EQ(effects.Delay(false).count(), 260);
+    EXPECT_EQ(effects.DelayJitter(true).count(), 25);
+    EXPECT_EQ(effects.DelayJitter(false).count(), 70);
     EXPECT_FLOAT_EQ(effects.DropRate(true), 0.10F);
     EXPECT_FLOAT_EQ(effects.DropRate(false), 0.35F);
     EXPECT_FLOAT_EQ(effects.DuplicateRate(true), 0.15F);
     EXPECT_FLOAT_EQ(effects.DuplicateRate(false), 0.45F);
     EXPECT_EQ(effects.DuplicateCount(true), 2);
     EXPECT_EQ(effects.DuplicateCount(false), 5);
+    EXPECT_EQ(effects.Snapshot(true).delay_jitter.count(), 25);
+    EXPECT_EQ(effects.Snapshot(false).delay_jitter.count(), 70);
     EXPECT_FLOAT_EQ(effects.Snapshot(true).duplicate_rate, 0.15F);
     EXPECT_FLOAT_EQ(effects.Snapshot(false).duplicate_rate, 0.45F);
     EXPECT_EQ(effects.Snapshot(true).duplicate_count, 2);
@@ -232,6 +267,8 @@ TEST(EffectConfigTest, DefaultsAreInert)
     EXPECT_EQ(effects.Direction(false).DuplicateCount(), kDefaultDuplicateCopies);
     EXPECT_EQ(effects.Delay(true).count(), 0);
     EXPECT_EQ(effects.Delay(false).count(), 0);
+    EXPECT_EQ(effects.DelayJitter(true).count(), 0);
+    EXPECT_EQ(effects.DelayJitter(false).count(), 0);
     EXPECT_FALSE(ShouldDrop(effects.DropRate(true)));
     EXPECT_FALSE(ShouldDrop(effects.DropRate(false)));
 }
