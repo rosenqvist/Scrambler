@@ -90,14 +90,15 @@ std::vector<ProcessInfo> EnumerateProcesses()
         {
             const auto* exe = static_cast<const wchar_t*>(entry.szExeFile);
 
-            int len = WideCharToMultiByte(CP_UTF8, 0, exe, -1, nullptr, 0, nullptr, nullptr);
+            const int exe_length = lstrlenW(exe);
+            const int len = WideCharToMultiByte(CP_UTF8, 0, exe, exe_length, nullptr, 0, nullptr, nullptr);
 
             std::string name;
 
-            if (len > 1)
+            if (len > 0)
             {
-                name.resize(static_cast<size_t>(len - 1));
-                WideCharToMultiByte(CP_UTF8, 0, exe, -1, name.data(), len, nullptr, nullptr);
+                name.resize(static_cast<size_t>(len));
+                WideCharToMultiByte(CP_UTF8, 0, exe, exe_length, name.data(), len, nullptr, nullptr);
             }
 
             std::wstring exe_path;
