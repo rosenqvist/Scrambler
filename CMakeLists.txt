@@ -121,7 +121,6 @@ target_link_libraries(scrambler PRIVATE
     iphlpapi
     winmm
     scrambler_warnings
-    scrambler_sanitizers
 )
 
 # Pick correct Qt platform plugin for the build
@@ -209,14 +208,9 @@ install(FILES
     DESTINATION .
 )
 
-# Copy the ASan runtime DLL next to both binaries so they can launch
+# Copy the ASan runtime DLL next to the test binary so it can launch
 # without needing the LLVM runtime directory on PATH.
 if (SCRAMBLER_ENABLE_ASAN)
-    add_custom_command(TARGET scrambler POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CLANG_RT_DIR}/clang_rt.asan_dynamic-x86_64.dll"
-            "$<TARGET_FILE_DIR:scrambler>"
-    )
     if (SCRAMBLER_ENABLE_TESTS)
         add_custom_command(TARGET scrambler_tests POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different

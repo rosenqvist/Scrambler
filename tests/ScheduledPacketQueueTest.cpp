@@ -1,10 +1,9 @@
-#include "core/ScheduledPacketQueue.h"
 #include "core/PacketData.h"
+#include "core/ScheduledPacketQueue.h"
 
 #include <chrono>
 #include <cstdint>
 #include <gtest/gtest.h>
-
 #include <vector>
 
 namespace
@@ -32,7 +31,9 @@ TEST(PacketSchedulingTest, ReturnsReadyPacketsInScheduledOrder)
     queue.Push(&mid);
 
     std::vector<uint32_t> ready_pids;
-    queue.PopReady(std::chrono::steady_clock::time_point{} + std::chrono::milliseconds(25), 8, [&](auto* packet)
+    queue.PopReady(std::chrono::steady_clock::time_point{} + std::chrono::milliseconds(25),
+                   8,
+                   [&](auto* packet)
     {
         ready_pids.push_back(packet->packet.metadata.pid);
     });
@@ -54,8 +55,9 @@ TEST(PacketSchedulingTest, ReturnsOnlyUpToTheRequestedNumberOfPackets)
     queue.Push(&second);
 
     std::vector<uint32_t> ready_pids;
-    const auto popped =
-        queue.PopReady(std::chrono::steady_clock::time_point{} + std::chrono::milliseconds(10), 1, [&](auto* packet)
+    const auto popped = queue.PopReady(std::chrono::steady_clock::time_point{} + std::chrono::milliseconds(10),
+                                       1,
+                                       [&](auto* packet)
     {
         ready_pids.push_back(packet->packet.metadata.pid);
     });

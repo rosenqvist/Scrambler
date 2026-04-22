@@ -3,6 +3,8 @@
 #include "core/PacketData.h"
 
 #include <queue>
+
+#include <utility>
 #include <vector>
 
 namespace scrambler::core
@@ -32,7 +34,7 @@ public:
         {
             ScheduledPacket* packet = queue_.top();
             queue_.pop();
-            on_packet(packet);
+            std::forward<Fn>(on_packet)(packet);
             ++popped;
         }
 
@@ -46,7 +48,7 @@ public:
         {
             ScheduledPacket* packet = queue_.top();
             queue_.pop();
-            on_packet(packet);
+            std::forward<Fn>(on_packet)(packet);
         }
     }
 

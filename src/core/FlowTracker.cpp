@@ -4,15 +4,16 @@
 #include "core/StartupError.h"
 #include "core/Types.h"
 
+#include <windivert.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <iphlpapi.h>
 #include <mutex>
 #include <shared_mutex>
 #include <unordered_map>
 #include <utility>
-#include <iphlpapi.h>
-#include <windivert.h>
 #include <vector>
 
 namespace scrambler::core

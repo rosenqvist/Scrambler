@@ -60,7 +60,7 @@ private:
     void ResetThrottleStateIfNeeded(std::uint64_t throttle_bytes_per_second);
     [[nodiscard]] bool ShouldDropPacket(const DirectionEffectSnapshot& snapshot, PacketEffectEmission& emission);
     [[nodiscard]] std::chrono::milliseconds ResolveScheduledDelay(const DirectionEffectSnapshot& snapshot,
-                                                                 PacketEffectEmission& emission);
+                                                                  PacketEffectEmission& emission);
     void EmitPacketCopies(const OwnedPacket& packet,
                           size_t total_copy_count,
                           std::chrono::steady_clock::time_point now,

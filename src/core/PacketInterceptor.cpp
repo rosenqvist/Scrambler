@@ -11,8 +11,6 @@
 
 #include <windivert.h>
 
-#include <algorithm>
-#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstddef>

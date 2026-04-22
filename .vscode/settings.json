@@ -12,6 +12,7 @@
 
     "cmake.configureOnOpen": true,
     "cmake.useCMakePresets": "always",
+    "cmake.copyCompileCommands": "${workspaceFolder}/compile_commands.json",
 
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd",

@@ -315,11 +315,11 @@ void HotkeyManager::RegisterAll()
 
 void HotkeyManager::UnregisterAll()
 {
-    if (auto kb = keyboard_hook.exchange(nullptr, std::memory_order_acq_rel))
+    if (auto* kb = keyboard_hook.exchange(nullptr, std::memory_order_acq_rel))
     {
         UnhookWindowsHookEx(kb);
     }
-    if (auto mouse = mouse_hook.exchange(nullptr, std::memory_order_acq_rel))
+    if (auto* mouse = mouse_hook.exchange(nullptr, std::memory_order_acq_rel))
     {
         UnhookWindowsHookEx(mouse);
     }

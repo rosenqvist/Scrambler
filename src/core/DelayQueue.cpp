@@ -4,6 +4,8 @@
 #include "core/PacketData.h"
 #include "core/Types.h"
 
+#include <windivert.h>
+
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -14,7 +16,6 @@
 #include <thread>
 #include <timeapi.h>
 #include <vector>
-#include <windivert.h>
 
 namespace scrambler::core
 {
@@ -159,7 +160,9 @@ void DelayQueue::DrainLoop()
         UINT send_len = 0;
         UINT send_count = 0;
 
-        scheduled_packets_.PopReady(now, kBatchSize, [&](ScheduledPacket* packet)
+        scheduled_packets_.PopReady(now,
+                                    kBatchSize,
+                                    [&](ScheduledPacket* packet)
         {
             std::memcpy(send_buf.data() + send_len, packet->packet.data.data(), packet->packet.length);
             send_addrs.at(static_cast<size_t>(send_count)) = packet->packet.addr;

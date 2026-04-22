@@ -51,9 +51,9 @@ jobs:
 
       - name: Configure
         run: >
+          $env:VCPKG_ROOT = $env:VCPKG_INSTALLATION_ROOT;
           cmake -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_C_COMPILER=cl
           -DCMAKE_CXX_COMPILER=cl
           -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           -DSCRAMBLER_ENABLE_TESTS=ON

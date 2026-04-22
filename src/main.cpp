@@ -22,7 +22,7 @@
 
 namespace
 {
-static void StopWinDivertService()
+void StopWinDivertService()
 {
     SC_HANDLE scm = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
     if (scm == nullptr)
