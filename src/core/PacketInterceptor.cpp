@@ -45,8 +45,6 @@ std::expected<void, StartupError> PacketInterceptor::Start()
         return std::unexpected(StartupError::kAlreadyRunning);
     }
 
-    // NETWORK layer with no flags, used to intercept packets (not just sniff)
-    // so we can hold, delay or drop packets before reinjecting them
     handle_ = WinDivertOpen("udp", WINDIVERT_LAYER_NETWORK, 0, 0);
 
     if (handle_ == INVALID_HANDLE_VALUE)
@@ -57,7 +55,6 @@ std::expected<void, StartupError> PacketInterceptor::Start()
         return std::unexpected(MapWinDivertOpenError(gle));
     }
 
-    // Driver side queue constants that are safe and tested.
     constexpr std::uint64_t kQueueLength = 8192;
     constexpr auto kQueueSizeBytes = static_cast<std::uint64_t>(8 * 1024 * 1024);
 
@@ -97,10 +94,8 @@ void PacketInterceptor::NotifyFatal(uint32_t gle)
 
 void PacketInterceptor::Stop()
 {
-    // exchange() so a destructor-after-never-started doesn't log a phantom "stopped" event.
     const bool was_running = running_.exchange(false);
 
-    // Stop the capture thread first so nothing new is pushed to delay_queue_
     if (handle_ != INVALID_HANDLE_VALUE)
     {
         WinDivertShutdown(handle_, WINDIVERT_SHUTDOWN_RECV);
@@ -117,7 +112,6 @@ void PacketInterceptor::Stop()
         delay_queue_.reset();
     }
 
-    // Now fully shut down and close.
     if (handle_ != INVALID_HANDLE_VALUE)
     {
         WinDivertShutdown(handle_, WINDIVERT_SHUTDOWN_SEND);
@@ -136,22 +130,14 @@ bool PacketInterceptor::IsRunning() const
     return running_.load();
 }
 
-// Main packet processing pipeline:
-// 1. Capture a UDP packet
-// 2. Parse headers and look up which process owns it
-// 3. If it belongs to a targeted PID we run it through the effect engine
-// 4. Otherwise reinject immediately so non targeted traffic is unaffected
 void PacketInterceptor::CaptureLoop()
 {
-    // Batch config
     constexpr unsigned int kBatchSize = 128;  // Up to 128 packets per kernel transition
     constexpr unsigned int kRecvBufferLen = kBatchSize * kStandardMtuSize;
 
-    // Receive buffers
     std::vector<uint8_t> recv_buf(kRecvBufferLen);
     std::vector<WINDIVERT_ADDRESS> recv_addrs(kBatchSize);
 
-    // Send buffers
     std::vector<uint8_t> send_buf;
     send_buf.reserve(kRecvBufferLen);
     std::vector<WINDIVERT_ADDRESS> send_addrs;
@@ -164,7 +150,6 @@ void PacketInterceptor::CaptureLoop()
         unsigned int recv_len = 0;
         unsigned int addr_len = kBatchSize * sizeof(WINDIVERT_ADDRESS);
 
-        // We can capture about 128 packets in a single kernel call
         if (WinDivertRecvEx(
                 handle_, recv_buf.data(), kRecvBufferLen, &recv_len, 0, recv_addrs.data(), &addr_len, nullptr)
             == 0)
@@ -186,10 +171,6 @@ void PacketInterceptor::CaptureLoop()
 
         const unsigned int num_packets = addr_len / sizeof(WINDIVERT_ADDRESS);
 
-        // Count direction up front. The per-packet loop only reads addr.Outbound
-        // when a packet matches a tracked PID, so we'd miss the majority otherwise.
-        // recv_addrs is gonna be hot in cache here. Two atomic fetch_adds per batch keep
-        // the hot path cost unchanged.
         unsigned int outbound_count = 0;
         for (unsigned int i = 0; i < num_packets; ++i)
         {
@@ -228,7 +209,6 @@ void PacketInterceptor::CaptureLoop()
             return true;
         };
 
-        // Walk through the batched buffer
         for (unsigned int i = 0; i < num_packets; ++i)
         {
             const WINDIVERT_ADDRESS& addr = recv_addrs.at(static_cast<size_t>(i));
@@ -238,7 +218,6 @@ void PacketInterceptor::CaptureLoop()
             void* next_pkt = nullptr;
             unsigned int next_len = 0;
 
-            // This helper is needed to find the length of the current packet and get the pointer to the next one
             if (WinDivertHelperParsePacket(current_pkt,
                                            current_remaining,
                                            &ip,
@@ -254,7 +233,6 @@ void PacketInterceptor::CaptureLoop()
                                            &next_len)
                 == 0)
             {
-                // If a packet is malformed or corrupted we abandon the rest of this batch
                 static std::atomic<uint64_t> occurrences{0};
                 LogRateLimited(
                     occurrences,
@@ -269,7 +247,6 @@ void PacketInterceptor::CaptureLoop()
             const unsigned int pkt_len = current_remaining - next_len;
             bool handled = false;
 
-            // Process the individual packet
             if (ip && udp)
             {
                 auto tuple = TupleFromPacket(*ip, *udp);
@@ -367,13 +344,11 @@ void PacketInterceptor::CaptureLoop()
                 }
             }
 
-            // Repack packets that should continue through the fast path immediately.
             if (!handled)
             {
                 append_immediate_packet(std::span(current_pkt, pkt_len), addr);
             }
 
-            // Advance pointers to the next packet in the batch
             current_pkt = static_cast<uint8_t*>(next_pkt);
             current_remaining = next_len;
 
@@ -383,7 +358,6 @@ void PacketInterceptor::CaptureLoop()
             }
         }
 
-        // Reinject all untouched packets in a single kernel call
         if (!send_addrs.empty())
         {
             if (WinDivertSendEx(handle_,

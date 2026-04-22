@@ -21,10 +21,9 @@ inline constexpr int kMaxThrottleKBytesPerSec = 10240;
 struct DirectionEffectSnapshot
 {
     std::chrono::milliseconds delay{0};
-    std::chrono::milliseconds delay_jitter{0};
     int delay_jitter_ms = 0;
-    int throttle_kbytes_per_sec = 0;
     std::uint64_t throttle_bytes_per_second = 0;
+    std::uint64_t throttle_revision = 0;
     bool burst_drop_enabled = false;
     float burst_drop_rate = 0.0F;
     int burst_drop_length = kDefaultBurstDropLength;
@@ -38,11 +37,15 @@ class DirectionEffectConfig
 public:
     [[nodiscard]] DirectionEffectSnapshot Snapshot() const
     {
-        return {.delay = std::chrono::milliseconds(DelayMs()),
-                .delay_jitter = std::chrono::milliseconds(DelayJitterMs()),
-                .delay_jitter_ms = DelayJitterMs(),
-                .throttle_kbytes_per_sec = ThrottleKBytesPerSec(),
-                .throttle_bytes_per_second = ThrottleBytesPerSecond(),
+        const auto delay_ms = DelayMs();
+        const auto delay_jitter_ms = DelayJitterMs();
+        const auto throttle_bytes_per_second = ThrottleBytesPerSecond();
+        const auto throttle_revision = ThrottleRevision();
+
+        return {.delay = std::chrono::milliseconds(delay_ms),
+                .delay_jitter_ms = delay_jitter_ms,
+                .throttle_bytes_per_second = throttle_bytes_per_second,
+                .throttle_revision = throttle_revision,
                 .burst_drop_enabled = BurstDropEnabled(),
                 .burst_drop_rate = BurstDropRate(),
                 .burst_drop_length = BurstDropLength(),
@@ -91,10 +94,20 @@ public:
         return static_cast<std::uint64_t>(ThrottleKBytesPerSec()) * 1024ULL;
     }
 
+    [[nodiscard]] std::uint64_t ThrottleRevision() const
+    {
+        return throttle_revision_.load(std::memory_order_relaxed);
+    }
+
     void SetThrottleKBytesPerSec(int throttle_kbytes_per_sec)
     {
-        throttle_kbytes_per_sec_.store(std::clamp(throttle_kbytes_per_sec, 0, kMaxThrottleKBytesPerSec),
-                                       std::memory_order_relaxed);
+        const int clamped = std::clamp(throttle_kbytes_per_sec, 0, kMaxThrottleKBytesPerSec);
+        const int current = throttle_kbytes_per_sec_.load(std::memory_order_relaxed);
+        if (current != clamped)
+        {
+            throttle_kbytes_per_sec_.store(clamped, std::memory_order_relaxed);
+            throttle_revision_.fetch_add(1, std::memory_order_relaxed);
+        }
     }
 
     [[nodiscard]] bool BurstDropEnabled() const
@@ -162,6 +175,7 @@ private:
     std::atomic<int> delay_ms_{0};
     std::atomic<int> delay_jitter_ms_{0};
     std::atomic<int> throttle_kbytes_per_sec_{0};
+    std::atomic<std::uint64_t> throttle_revision_{0};
     std::atomic<bool> burst_drop_enabled_{false};
     std::atomic<float> burst_drop_rate_{0.0F};
     std::atomic<int> burst_drop_length_{kDefaultBurstDropLength};

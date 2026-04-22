@@ -312,6 +312,8 @@ TEST(EffectConfigTest, DelayJitterThrottleBurstDropAndDuplicateValuesAreIndepend
     effects.SetDuplicateRate(false, 0.45F);
     effects.SetDuplicateCount(true, 2);
     effects.SetDuplicateCount(false, 5);
+    const auto outbound = effects.Snapshot(true);
+    const auto inbound = effects.Snapshot(false);
 
     EXPECT_EQ(effects.Delay(true).count(), 80);
     EXPECT_EQ(effects.Delay(false).count(), 260);
@@ -331,22 +333,20 @@ TEST(EffectConfigTest, DelayJitterThrottleBurstDropAndDuplicateValuesAreIndepend
     EXPECT_FLOAT_EQ(effects.DuplicateRate(false), 0.45F);
     EXPECT_EQ(effects.DuplicateCount(true), 2);
     EXPECT_EQ(effects.DuplicateCount(false), 5);
-    EXPECT_EQ(effects.Snapshot(true).delay_jitter.count(), 25);
-    EXPECT_EQ(effects.Snapshot(false).delay_jitter.count(), 70);
-    EXPECT_EQ(effects.Snapshot(true).throttle_kbytes_per_sec, 256);
-    EXPECT_EQ(effects.Snapshot(false).throttle_kbytes_per_sec, 1536);
-    EXPECT_EQ(effects.Snapshot(true).throttle_bytes_per_second, 256ULL * 1024ULL);
-    EXPECT_EQ(effects.Snapshot(false).throttle_bytes_per_second, 1536ULL * 1024ULL);
-    EXPECT_TRUE(effects.Snapshot(true).burst_drop_enabled);
-    EXPECT_TRUE(effects.Snapshot(false).burst_drop_enabled);
-    EXPECT_FLOAT_EQ(effects.Snapshot(true).burst_drop_rate, 0.20F);
-    EXPECT_FLOAT_EQ(effects.Snapshot(false).burst_drop_rate, 0.60F);
-    EXPECT_EQ(effects.Snapshot(true).burst_drop_length, 4);
-    EXPECT_EQ(effects.Snapshot(false).burst_drop_length, 6);
-    EXPECT_FLOAT_EQ(effects.Snapshot(true).duplicate_rate, 0.15F);
-    EXPECT_FLOAT_EQ(effects.Snapshot(false).duplicate_rate, 0.45F);
-    EXPECT_EQ(effects.Snapshot(true).duplicate_count, 2);
-    EXPECT_EQ(effects.Snapshot(false).duplicate_count, 5);
+    EXPECT_EQ(outbound.delay_jitter_ms, 25);
+    EXPECT_EQ(inbound.delay_jitter_ms, 70);
+    EXPECT_EQ(outbound.throttle_bytes_per_second, 256ULL * 1024ULL);
+    EXPECT_EQ(inbound.throttle_bytes_per_second, 1536ULL * 1024ULL);
+    EXPECT_TRUE(outbound.burst_drop_enabled);
+    EXPECT_TRUE(inbound.burst_drop_enabled);
+    EXPECT_FLOAT_EQ(outbound.burst_drop_rate, 0.20F);
+    EXPECT_FLOAT_EQ(inbound.burst_drop_rate, 0.60F);
+    EXPECT_EQ(outbound.burst_drop_length, 4);
+    EXPECT_EQ(inbound.burst_drop_length, 6);
+    EXPECT_FLOAT_EQ(outbound.duplicate_rate, 0.15F);
+    EXPECT_FLOAT_EQ(inbound.duplicate_rate, 0.45F);
+    EXPECT_EQ(outbound.duplicate_count, 2);
+    EXPECT_EQ(inbound.duplicate_count, 5);
 }
 
 // Default State

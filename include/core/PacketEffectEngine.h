@@ -18,9 +18,8 @@ enum class PacketEffectKind : std::uint8_t
     kDelay = 1U << 1,
     kDuplicate = 1U << 2,
     kBandwidthThrottle = 1U << 3,
-    kReorder = 1U << 4,
-    kBurstDrop = 1U << 5,
-    kDelayJitter = 1U << 6,
+    kBurstDrop = 1U << 4,
+    kDelayJitter = 1U << 5,
 };
 
 using PacketEffectMask = std::uint8_t;
@@ -53,11 +52,10 @@ public:
     [[nodiscard]] PacketEffectEmission Process(OwnedPacket packet, std::chrono::steady_clock::time_point now);
 
 private:
-    // Per-direction state lives here.
     [[nodiscard]] static std::chrono::steady_clock::duration TransmissionTimeForPacket(
         size_t packet_length,
         std::uint64_t throttle_bytes_per_second);
-    void ResetThrottleStateIfNeeded(std::uint64_t throttle_bytes_per_second);
+    void ResetThrottleStateIfNeeded(const DirectionEffectSnapshot& snapshot);
     [[nodiscard]] bool ShouldDropPacket(const DirectionEffectSnapshot& snapshot, PacketEffectEmission& emission);
     [[nodiscard]] std::chrono::milliseconds ResolveScheduledDelay(const DirectionEffectSnapshot& snapshot,
                                                                   PacketEffectEmission& emission);
@@ -72,7 +70,7 @@ private:
     std::mt19937 rng_;
     int burst_packets_remaining_ = 0;
     std::chrono::steady_clock::time_point next_throttle_release_at_;
-    std::uint64_t last_throttle_bytes_per_second_ = 0;
+    std::uint64_t last_throttle_revision_ = 0;
 };
 
 class PacketEffectEngine

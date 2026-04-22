@@ -38,14 +38,6 @@ uint64_t LocalEndpointKey(const FiveTuple& tuple, bool is_outbound)
                        : MakeEndpointKey(tuple.dst_addr, tuple.dst_port);
 }
 
-// Walks the current Windows UDP table and calls
-// `visitor(local_addr, local_port, pid)`
-// for each entry. Centralizes the GetExtendedUdpTable retry and error
-// boilerplate so both the miss-path lookup and the startup bootstrap share it.
-//
-// The retry loop follows Microsoft's IP Helper guidance. Between the size
-// query and the data fetch another process may open a UDP socket and grow
-// the table, so we re-ask with a bigger buffer until the call succeeds.
 template <typename Visitor>
 bool ForEachUdpEntry(Visitor visitor)
 {
@@ -76,10 +68,6 @@ bool ForEachUdpEntry(Visitor visitor)
     return true;
 }
 
-// Fallback PID lookup via the Windows UDP table.
-// Used when the FLOW layer hasn't seen this connection yet and the endpoint index
-// has no entry for it either. Happens for a flow that established after we
-// started but whose FLOW_ESTABLISHED event we haven't drained yet.
 uint32_t LookupPidFromSystem(uint32_t local_addr, uint16_t local_port)
 {
     uint32_t result = 0;
@@ -107,8 +95,6 @@ std::expected<void, StartupError> FlowTracker::Start()
         return std::unexpected(StartupError::kAlreadyRunning);
     }
 
-    // SNIFF + RECV_ONLY to observe flow without intercepting any traffic.
-    // This gives us the PID = connection mappings without touching any packets.
     handle_ = WinDivertOpen("udp", WINDIVERT_LAYER_FLOW, 0, WINDIVERT_FLAG_SNIFF | WINDIVERT_FLAG_RECV_ONLY);
 
     if (handle_ == INVALID_HANDLE_VALUE)
@@ -119,9 +105,6 @@ std::expected<void, StartupError> FlowTracker::Start()
         return std::unexpected(MapWinDivertOpenError(gle));
     }
 
-    // Seed the port index before the tracking thread starts. Any flow already
-    // open at this point has no FLOW_ESTABLISHED event coming our way, so
-    // without this bootstrap its first packet would cost a kernel scan.
     BootstrapFromSystem();
 
     running_.store(true);
@@ -201,23 +184,18 @@ uint32_t FlowTracker::LookupPid(const FiveTuple& tuple, bool is_outbound)
     {
         const std::shared_lock lock(mutex_);
 
-        // Primary: full 5-tuple map, populated by FLOW_ESTABLISHED events.
         if (auto it = flow_table_.find(tuple); it != flow_table_.end())
         {
             CountEvent(Counter::kFlowCacheHits);
             return it->second;
         }
 
-        // Secondary: local-endpoint index, seeded from GetExtendedUdpTable at
-        // Start() and refreshed on every FLOW_ESTABLISHED. Covers flows that
-        // existed before our handle opened without guessing on the remote port.
         if (auto it = endpoint_to_pid_.find(LocalEndpointKey(tuple, is_outbound)); it != endpoint_to_pid_.end())
         {
             CountEvent(Counter::kFlowCacheHits);
             return it->second;
         }
 
-        // INADDR_ANY listeners show up in the UDP table with local_addr = 0.
         const uint16_t local_port = is_outbound ? tuple.src_port : tuple.dst_port;
         if (auto it = endpoint_to_pid_.find(MakeEndpointKey(0, local_port)); it != endpoint_to_pid_.end())
         {
@@ -226,8 +204,6 @@ uint32_t FlowTracker::LookupPid(const FiveTuple& tuple, bool is_outbound)
         }
     }
 
-    // Neither cache had it. This costs a full UDP-table kernel scan and should
-    // be rare once warm. Only the FLOW vs NETWORK race window triggers it.
     CountEvent(Counter::kFlowCacheKernelScans);
     const uint32_t local_addr = is_outbound ? tuple.src_addr : tuple.dst_addr;
     const uint16_t local_port = is_outbound ? tuple.src_port : tuple.dst_port;
@@ -240,10 +216,8 @@ uint32_t FlowTracker::LookupPid(const FiveTuple& tuple, bool is_outbound)
     return pid;
 }
 
-// Inserts or overwrites both directions of a flow mapping.
 void FlowTracker::InsertFlow(const FiveTuple& tuple, uint32_t pid)
 {
-    // Store both directions so packet lookups match regardless of direction
     const std::unique_lock lock(mutex_);
     flow_table_[tuple] = pid;
     flow_table_[tuple.Reversed()] = pid;
@@ -260,8 +234,6 @@ void FlowTracker::OnFlowEstablished(const FiveTuple& tuple, uint32_t pid)
         const std::unique_lock lock(mutex_);
         flow_table_[tuple] = pid;
         flow_table_[tuple.Reversed()] = pid;
-        // TupleFromFlow puts the local address in src_*, so src_port is the
-        // local endpoint here, which is exactly what the fallback index is keyed on.
         endpoint_to_pid_[MakeEndpointKey(tuple.src_addr, tuple.src_port)] = pid;
     }
 #ifndef NDEBUG

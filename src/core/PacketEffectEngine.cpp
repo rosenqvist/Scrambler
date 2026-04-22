@@ -28,13 +28,12 @@ std::chrono::steady_clock::duration DirectionPacketEffectEngine::TransmissionTim
         std::chrono::nanoseconds((std::max)(transmission_nanos, 1ULL)));
 }
 
-void DirectionPacketEffectEngine::ResetThrottleStateIfNeeded(std::uint64_t throttle_bytes_per_second)
+void DirectionPacketEffectEngine::ResetThrottleStateIfNeeded(const DirectionEffectSnapshot& snapshot)
 {
-    if (throttle_bytes_per_second != last_throttle_bytes_per_second_)
+    if (snapshot.throttle_revision != last_throttle_revision_)
     {
-        // If the throttle rate changes, start with a fresh queue.
         next_throttle_release_at_ = {};
-        last_throttle_bytes_per_second_ = throttle_bytes_per_second;
+        last_throttle_revision_ = snapshot.throttle_revision;
     }
 }
 
@@ -180,7 +179,7 @@ DirectionPacketEffectEngine::DirectionPacketEffectEngine(const DirectionEffectCo
 PacketEffectEmission DirectionPacketEffectEngine::Process(OwnedPacket packet, std::chrono::steady_clock::time_point now)
 {
     const DirectionEffectSnapshot snapshot = config_->Snapshot();
-    ResetThrottleStateIfNeeded(snapshot.throttle_bytes_per_second);
+    ResetThrottleStateIfNeeded(snapshot);
 
     PacketEffectEmission emission;
     if (ShouldDropPacket(snapshot, emission))
