@@ -1,8 +1,20 @@
 #include "core/DelayQueue.h"
 
 #include "core/Diagnostics.h"
+#include "core/PacketData.h"
+#include "core/Types.h"
 
+#include <array>
+#include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <errhandlingapi.h>
+#include <thread>
 #include <timeapi.h>
+#include <vector>
+#include <windivert.h>
 
 namespace scrambler::core
 {
@@ -44,7 +56,7 @@ DelayQueue::DelayQueue(HANDLE divert_handle)
 {
     for (size_t i = 0; i < kDelayQueueCapacity; ++i)
     {
-        free_queue_.push(&memory_pool_[i]);
+        free_queue_.push(&memory_pool_.at(i));
     }
 }
 
@@ -123,7 +135,7 @@ void DelayQueue::Reinject(const ScheduledPacket& pkt)
 
 void DelayQueue::DrainLoop()
 {
-    TimerResolutionScope timer_scope;
+    const TimerResolutionScope timer_scope;
 
     constexpr UINT kBatchSize = 128;
     constexpr UINT kBatchBufferLen = kBatchSize * kStandardMtuSize;
@@ -150,7 +162,7 @@ void DelayQueue::DrainLoop()
         scheduled_packets_.PopReady(now, kBatchSize, [&](ScheduledPacket* packet)
         {
             std::memcpy(send_buf.data() + send_len, packet->packet.data.data(), packet->packet.length);
-            send_addrs[send_count] = packet->packet.addr;
+            send_addrs.at(static_cast<size_t>(send_count)) = packet->packet.addr;
             ready_packets.at(static_cast<size_t>(send_count)) = packet;
             send_len += packet->packet.length;
             ++send_count;

@@ -1,5 +1,8 @@
 #include "core/ScheduledPacketQueue.h"
+#include "core/PacketData.h"
 
+#include <chrono>
+#include <cstdint>
 #include <gtest/gtest.h>
 
 #include <vector>
@@ -35,8 +38,8 @@ TEST(PacketSchedulingTest, ReturnsReadyPacketsInScheduledOrder)
     });
 
     ASSERT_EQ(ready_pids.size(), 2U);
-    EXPECT_EQ(ready_pids[0], 2U);
-    EXPECT_EQ(ready_pids[1], 3U);
+    EXPECT_EQ(ready_pids.at(0), 2U);
+    EXPECT_EQ(ready_pids.at(1), 3U);
     ASSERT_NE(queue.Peek(), nullptr);
     EXPECT_EQ(queue.Peek()->packet.metadata.pid, 1U);
 }
@@ -59,7 +62,7 @@ TEST(PacketSchedulingTest, ReturnsOnlyUpToTheRequestedNumberOfPackets)
 
     EXPECT_EQ(popped, 1U);
     ASSERT_EQ(ready_pids.size(), 1U);
-    EXPECT_EQ(ready_pids[0], 10U);
+    EXPECT_EQ(ready_pids.at(0), 10U);
     ASSERT_NE(queue.Peek(), nullptr);
     EXPECT_EQ(queue.Peek()->packet.metadata.pid, 11U);
 }
@@ -80,7 +83,7 @@ TEST(PacketSchedulingTest, DrainsAllRemainingPacketsInScheduledOrder)
     });
 
     ASSERT_EQ(drained_pids.size(), 2U);
-    EXPECT_EQ(drained_pids[0], 21U);
-    EXPECT_EQ(drained_pids[1], 20U);
+    EXPECT_EQ(drained_pids.at(0), 21U);
+    EXPECT_EQ(drained_pids.at(1), 20U);
     EXPECT_TRUE(queue.Empty());
 }

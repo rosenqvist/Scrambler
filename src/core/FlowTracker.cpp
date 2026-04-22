@@ -1,9 +1,18 @@
 #include "core/FlowTracker.h"
 
 #include "core/Diagnostics.h"
+#include "core/StartupError.h"
 #include "core/Types.h"
 
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <mutex>
+#include <shared_mutex>
+#include <unordered_map>
+#include <utility>
 #include <iphlpapi.h>
+#include <windivert.h>
 #include <vector>
 
 namespace scrambler::core
@@ -37,7 +46,7 @@ uint64_t LocalEndpointKey(const FiveTuple& tuple, bool is_outbound)
 // query and the data fetch another process may open a UDP socket and grow
 // the table, so we re-ask with a bigger buffer until the call succeeds.
 template <typename Visitor>
-bool ForEachUdpEntry(Visitor&& visitor)
+bool ForEachUdpEntry(Visitor visitor)
 {
     ULONG size = 0;
     DWORD ret = GetExtendedUdpTable(nullptr, &size, FALSE, AF_INET, UDP_TABLE_OWNER_PID, 0);
@@ -61,8 +70,7 @@ bool ForEachUdpEntry(Visitor&& visitor)
     {
         auto& entry = table->table[i];  // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
 
-        std::forward<Visitor>(
-            visitor)(ntohl(entry.dwLocalAddr), ntohs(static_cast<uint16_t>(entry.dwLocalPort)), entry.dwOwningPid);
+        visitor(ntohl(entry.dwLocalAddr), ntohs(static_cast<uint16_t>(entry.dwLocalPort)), entry.dwOwningPid);
     }
     return true;
 }
@@ -137,7 +145,7 @@ void FlowTracker::BootstrapFromSystem()
 
     const size_t count = snapshot.size();
     {
-        std::unique_lock lock(mutex_);
+        const std::unique_lock lock(mutex_);
         endpoint_to_pid_ = std::move(snapshot);
     }
     LogInfo("FlowTracker: bootstrapped {} UDP endpoints from system table", count);
@@ -190,7 +198,7 @@ bool FlowTracker::IsRunning() const
 uint32_t FlowTracker::LookupPid(const FiveTuple& tuple, bool is_outbound)
 {
     {
-        std::shared_lock lock(mutex_);
+        const std::shared_lock lock(mutex_);
 
         // Primary: full 5-tuple map, populated by FLOW_ESTABLISHED events.
         if (auto it = flow_table_.find(tuple); it != flow_table_.end())
@@ -235,7 +243,7 @@ uint32_t FlowTracker::LookupPid(const FiveTuple& tuple, bool is_outbound)
 void FlowTracker::InsertFlow(const FiveTuple& tuple, uint32_t pid)
 {
     // Store both directions so packet lookups match regardless of direction
-    std::unique_lock lock(mutex_);
+    const std::unique_lock lock(mutex_);
     flow_table_[tuple] = pid;
     flow_table_[tuple.Reversed()] = pid;
 }
@@ -248,7 +256,7 @@ void FlowTracker::OnFlowEstablished(const FiveTuple& tuple, uint32_t pid)
     }
 
     {
-        std::unique_lock lock(mutex_);
+        const std::unique_lock lock(mutex_);
         flow_table_[tuple] = pid;
         flow_table_[tuple.Reversed()] = pid;
         // TupleFromFlow puts the local address in src_*, so src_port is the
@@ -273,7 +281,7 @@ void FlowTracker::OnFlowDeleted(const FiveTuple& tuple)
 {
     uint32_t pid = 0;
     {
-        std::shared_lock lock(mutex_);
+        const std::shared_lock lock(mutex_);
         auto it = flow_table_.find(tuple);
         if (it != flow_table_.end())
         {
@@ -282,7 +290,7 @@ void FlowTracker::OnFlowDeleted(const FiveTuple& tuple)
     }
 
     {
-        std::unique_lock lock(mutex_);
+        const std::unique_lock lock(mutex_);
         flow_table_.erase(tuple);
         flow_table_.erase(tuple.Reversed());
         endpoint_to_pid_.erase(MakeEndpointKey(tuple.src_addr, tuple.src_port));
