@@ -28,6 +28,120 @@ std::chrono::steady_clock::duration DirectionPacketEffectEngine::TransmissionTim
         std::chrono::nanoseconds((std::max)(transmission_nanos, 1ULL)));
 }
 
+void DirectionPacketEffectEngine::ResetThrottleStateIfNeeded(std::uint64_t throttle_bytes_per_second)
+{
+    if (throttle_bytes_per_second != last_throttle_bytes_per_second_)
+    {
+        // If the throttle rate changes, start with a fresh queue.
+        next_throttle_release_at_ = {};
+        last_throttle_bytes_per_second_ = throttle_bytes_per_second;
+    }
+}
+
+bool DirectionPacketEffectEngine::ShouldDropPacket(const DirectionEffectSnapshot& snapshot,
+                                                   PacketEffectEmission& emission)
+{
+    if (!snapshot.burst_drop_enabled)
+    {
+        burst_packets_remaining_ = 0;
+    }
+    else
+    {
+        if (burst_packets_remaining_ > 0)
+        {
+            --burst_packets_remaining_;
+            emission.applied_effects |= ToMask(PacketEffectKind::kDrop);
+            emission.applied_effects |= ToMask(PacketEffectKind::kBurstDrop);
+            return true;
+        }
+
+        if (ShouldApplyRate(snapshot.burst_drop_rate, rng_))
+        {
+            burst_packets_remaining_ = snapshot.burst_drop_length - 1;
+            emission.applied_effects |= ToMask(PacketEffectKind::kDrop);
+            emission.applied_effects |= ToMask(PacketEffectKind::kBurstDrop);
+            return true;
+        }
+    }
+
+    if (!snapshot.burst_drop_enabled && ShouldDrop(snapshot.drop_rate, rng_))
+    {
+        emission.applied_effects |= ToMask(PacketEffectKind::kDrop);
+        return true;
+    }
+
+    return false;
+}
+
+std::chrono::milliseconds DirectionPacketEffectEngine::ResolveScheduledDelay(const DirectionEffectSnapshot& snapshot,
+                                                                             PacketEffectEmission& emission)
+{
+    auto scheduled_delay = snapshot.delay;
+    if (snapshot.delay.count() > 0)
+    {
+        emission.applied_effects |= ToMask(PacketEffectKind::kDelay);
+    }
+
+    if (snapshot.delay_jitter_ms > 0)
+    {
+        const int jitter_ms = std::uniform_int_distribution<int>(0, snapshot.delay_jitter_ms)(rng_);
+        scheduled_delay += std::chrono::milliseconds(jitter_ms);
+        emission.applied_effects |= ToMask(PacketEffectKind::kDelayJitter);
+    }
+
+    return scheduled_delay;
+}
+
+void DirectionPacketEffectEngine::EmitPacketCopies(const OwnedPacket& packet,
+                                                   size_t total_copy_count,
+                                                   std::chrono::steady_clock::time_point now,
+                                                   std::chrono::milliseconds scheduled_delay,
+                                                   std::uint64_t throttle_bytes_per_second,
+                                                   PacketEffectEmission& emission)
+{
+    const bool has_throttle = throttle_bytes_per_second > 0;
+    const auto base_release_at = now + scheduled_delay;
+    auto throttle_release_at = next_throttle_release_at_ < now ? now : next_throttle_release_at_;
+    const auto transmission_time = TransmissionTimeForPacket(packet.length, throttle_bytes_per_second);
+    bool applied_throttle = false;
+
+    emission.immediate_packets.reserve(total_copy_count);
+    emission.scheduled_packets.reserve(total_copy_count);
+
+    for (size_t copy_index = 0; copy_index < total_copy_count; ++copy_index)
+    {
+        auto release_at = base_release_at;
+        if (has_throttle)
+        {
+            const auto throttled_release_at = (std::max)(release_at, throttle_release_at);
+            if (throttled_release_at > release_at)
+            {
+                applied_throttle = true;
+            }
+            release_at = throttled_release_at;
+            throttle_release_at = throttled_release_at + transmission_time;
+        }
+
+        if (release_at <= now)
+        {
+            emission.AddImmediate(packet);
+        }
+        else
+        {
+            emission.AddScheduled(packet, release_at);
+        }
+    }
+
+    if (has_throttle)
+    {
+        next_throttle_release_at_ = throttle_release_at;
+        if (applied_throttle)
+        {
+            emission.applied_effects |= ToMask(PacketEffectKind::kBandwidthThrottle);
+        }
+    }
+}
+
 void PacketEffectEmission::AddImmediate(OwnedPacket packet)
 {
     immediate_packets.push_back(packet);
@@ -66,104 +180,23 @@ DirectionPacketEffectEngine::DirectionPacketEffectEngine(const DirectionEffectCo
 PacketEffectEmission DirectionPacketEffectEngine::Process(OwnedPacket packet, std::chrono::steady_clock::time_point now)
 {
     const DirectionEffectSnapshot snapshot = config_->Snapshot();
-
-    if (snapshot.throttle_bytes_per_second != last_throttle_bytes_per_second_)
-    {
-        // If the throttle rate changes, start with a fresh queue.
-        next_throttle_release_at_ = {};
-        last_throttle_bytes_per_second_ = snapshot.throttle_bytes_per_second;
-    }
+    ResetThrottleStateIfNeeded(snapshot.throttle_bytes_per_second);
 
     PacketEffectEmission emission;
-    if (!snapshot.burst_drop_enabled)
+    if (ShouldDropPacket(snapshot, emission))
     {
-        burst_packets_remaining_ = 0;
-    }
-    else
-    {
-        if (burst_packets_remaining_ > 0)
-        {
-            --burst_packets_remaining_;
-            emission.applied_effects |= ToMask(PacketEffectKind::kDrop);
-            emission.applied_effects |= ToMask(PacketEffectKind::kBurstDrop);
-            return emission;
-        }
-
-        if (ShouldApplyRate(snapshot.burst_drop_rate, rng_))
-        {
-            burst_packets_remaining_ = snapshot.burst_drop_length - 1;
-            emission.applied_effects |= ToMask(PacketEffectKind::kDrop);
-            emission.applied_effects |= ToMask(PacketEffectKind::kBurstDrop);
-            return emission;
-        }
-    }
-
-    if (!snapshot.burst_drop_enabled && ShouldDrop(snapshot.drop_rate, rng_))
-    {
-        emission.applied_effects |= ToMask(PacketEffectKind::kDrop);
         return emission;
     }
 
-    const bool should_duplicate = snapshot.duplicate_count > 0 && ShouldApplyRate(snapshot.duplicate_rate, rng_);
-    const size_t total_copy_count = should_duplicate ? static_cast<size_t>(snapshot.duplicate_count + 1) : 1U;
-    if (should_duplicate)
+    size_t total_copy_count = 1U;
+    if (snapshot.duplicate_count > 0 && ShouldApplyRate(snapshot.duplicate_rate, rng_))
     {
+        total_copy_count += static_cast<size_t>(snapshot.duplicate_count);
         emission.applied_effects |= ToMask(PacketEffectKind::kDuplicate);
     }
 
-    const bool has_base_delay = snapshot.delay.count() > 0;
-    const bool has_jitter = snapshot.delay_jitter_ms > 0;
-    const bool has_throttle = snapshot.throttle_bytes_per_second > 0;
-    auto scheduled_delay = snapshot.delay;
-    if (has_base_delay)
-    {
-        emission.applied_effects |= ToMask(PacketEffectKind::kDelay);
-    }
-    emission.immediate_packets.reserve(total_copy_count);
-    emission.scheduled_packets.reserve(total_copy_count);
-
-    if (has_jitter)
-    {
-        const int jitter_ms = std::uniform_int_distribution<int>(0, snapshot.delay_jitter_ms)(rng_);
-        scheduled_delay += std::chrono::milliseconds(jitter_ms);
-        emission.applied_effects |= ToMask(PacketEffectKind::kDelayJitter);
-    }
-
-    const auto base_release_at = now + scheduled_delay;
-    auto throttle_release_at = next_throttle_release_at_ < now ? now : next_throttle_release_at_;
-    const auto transmission_time = TransmissionTimeForPacket(packet.length, snapshot.throttle_bytes_per_second);
-    bool applied_throttle = false;
-
-    for (size_t copy_index = 0; copy_index < total_copy_count; ++copy_index)
-    {
-        auto release_at = base_release_at;
-        if (has_throttle)
-        {
-            const auto throttled_release_at = (std::max)(release_at, throttle_release_at);
-            applied_throttle = applied_throttle || throttled_release_at > release_at;
-            release_at = throttled_release_at;
-            throttle_release_at = throttled_release_at + transmission_time;
-        }
-
-        if (release_at <= now)
-        {
-            emission.AddImmediate(packet);
-        }
-        else
-        {
-            emission.AddScheduled(packet, release_at);
-        }
-    }
-
-    if (has_throttle)
-    {
-        next_throttle_release_at_ = throttle_release_at;
-        if (applied_throttle)
-        {
-            emission.applied_effects |= ToMask(PacketEffectKind::kBandwidthThrottle);
-        }
-    }
-
+    const auto scheduled_delay = ResolveScheduledDelay(snapshot, emission);
+    EmitPacketCopies(packet, total_copy_count, now, scheduled_delay, snapshot.throttle_bytes_per_second, emission);
     return emission;
 }
 
