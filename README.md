@@ -1,5 +1,5 @@
 # Scrambler
-Scrambler is a Windows utility desig ned to simulate poor network conditions for testing purposes. It leverages WinDivert to intercept UDP (IPv4) traffic at the kernel level, allowing it to selectively delay or drop packets for specific processes. This can help developers test their applications under certain network conditions. 
+Scrambler is a Windows utility designed to simulate poor network conditions for testing purposes. It leverages WinDivert to intercept UDP (IPv4) traffic at the kernel level, allowing it to selectively delay or drop packets for specific processes. This can help developers test their applications under certain network conditions.
 
 | Main Window | Settings Window |
 |-------------|----------------|
@@ -32,14 +32,15 @@ Non-targeted traffic is reinjected immediately with no modification.
 - Must be run as Administrator since WinDivert requires kernel-level access to install its driver
 
 ## Installation
-Download the latest release zip from the [Releases page](https://github.com/rosenqvist/Scrambler/releases), extract anywhere and run Scrambler.exe as Administrator. No installer needed.
+Download the latest release zip from the [Releases page](https://github.com/rosenqvist/Scrambler/releases), extract anywhere and launch `Scrambler.exe`. Windows will prompt for Administrator permission on start. No installer needed.
 The WinDivert driver is automatically loaded on first use and unloaded on exit or reboot.
 
 > [!WARNING]
 > **USE AT YOUR OWN RISK**
 > This tool installs a **kernel-level network driver (WinDivert)** that intercepts and modifies network packets.
 > Many online games use anti-cheat systems that may **detect, block, or ban users** for running software that interacts with network traffic at the kernel level.
-> > **Do not run Scrambler alongside games that use kernel-level anti-cheat systems.**
+>
+> **Do not run Scrambler alongside games that use kernel-level anti-cheat systems.**
 > - Close Scrambler before launching such games
 > - Reboot your system to ensure the **WinDivert driver is fully unloaded**
 ---
@@ -51,6 +52,20 @@ This tool is designed for **legitimate testing purposes only**, including:
 - Development and QA
 - Debugging networked applications
 
+## Quick Start
+1. Launch `Scrambler.exe`.
+2. Select a process from the list, or use the filter box to find it.
+3. Set the network conditions you want to apply.
+4. Click `Start` to begin intercepting traffic.
+5. Open the `Diagnostics` tab if you want to check counters and logs while the app is running.
+6. Use the main toggle button again when you want to stop.
+
+## Limitations
+- Windows only
+- UDP over IPv4 only. TCP and IPv6 traffic are not affected.
+- Must be run as Administrator
+- Only traffic that can be matched to the selected process is affected. Everything else is passed through unchanged.
+
 ## Building from Source
 
 ### Prerequisites
@@ -59,8 +74,12 @@ Before building, ensure you have the following installed:
 
 - **[CMake](https://cmake.org/download/)**
 - **[Ninja](https://ninja-build.org/)**
-- **[LLVM/Clang](https://llvm.org/builds/)**
+- **[LLVM/Clang](https://llvm.org/builds/)** installed, with `clang-cl` available on `PATH`
+- **[Visual Studio](https://visualstudio.microsoft.com/downloads/)** or **[Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/)** with the C++ tools and Windows SDK installed
 - **[vcpkg](https://github.com/microsoft/vcpkg)**
+- `VCPKG_ROOT` set to your vcpkg folder
+
+Run the commands below from a shell where the Visual Studio C++ tools are available. Developer PowerShell for Visual Studio is the simplest option.
 
 ---
 ### Build
@@ -69,20 +88,16 @@ Before building, ensure you have the following installed:
 
 ```powershell
 cmake --preset debug
-cmake --build build/debug
+cmake --build --preset debug
 ```
 **Release build:**
 
 ```powershell
 cmake --preset release
-cmake --build build/release
+cmake --build --preset release
 ```
-**Run Tests:**
 
-```powershell
-ctest --test-dir build/debug --show-only
-ctest --test-dir build/debug --output-on-failure
-```
+The `relwithdebinfo` and `relwithdebinfo-asan` presets are built the same way. Replace the preset name in the commands above when needed.
 
 ### Available Presets
 
@@ -95,24 +110,25 @@ ctest --test-dir build/debug --output-on-failure
 
 ## Testing
 
-Scrambler is validated using two complementary tools on Windows:
+Scrambler uses three test setups on Windows:
 
-**Unit tests under AddressSanitizer.** The core logic: (`FiveTuple`, `TargetSet`, `EffectConfig`, `ProcessEnumerator` helpers) is run by GoogleTest cases and an 8 thread concurrent stress test on the target PID. Build and run with:
+- **`debug`** for unit tests while developing:
 
-```powershell
-cmake --preset relwithdebinfo-asan
-cmake --build build/relwithdebinfo-asan
-ctest --test-dir build/relwithdebinfo-asan --output-on-failure
-```
+  ```powershell
+  ctest --preset debug
+  ```
 
-ASan is not run against `scrambler.exe` itself because the prebuilt Qt 6 binaries from vcpkg don't support it.
+- **`relwithdebinfo-asan`** for extra memory checks in the unit tests:
 
-The full application is tested under Microsoft Application Verifier with the Basic check group enabled (Exceptions, Handles, Heaps, Leak, Locks, Memory, ThreadPool, TLS). Build the binary with:
+  ```powershell
+  ctest --preset relwithdebinfo-asan
+  ```
 
-```powershell
-cmake --preset relwithdebinfo
-cmake --build build/relwithdebinfo
-```
+  This preset covers the core packet effect and process targeting logic, including an 8-thread concurrent stress test.
+  ASan is not run against `scrambler.exe` itself because the prebuilt Qt 6 binaries from vcpkg don't support it.
+
+- **`relwithdebinfo`** for Microsoft Application Verifier on the full application.
+  Use the Basic check group (Exceptions, Handles, Heaps, Leak, Locks, Memory, ThreadPool, TLS).
 
 ## Third-Party Licenses
 
