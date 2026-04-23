@@ -97,7 +97,7 @@ MainWindow::MainWindow(QWidget* parent)
             &MainWindow::OnProcessListReady);
 
     RefreshProcessList();
-    UpdateDriverStatus("Stopped", false);
+    UpdatePipelineStatus("Stopped", false);
 }
 
 MainWindow::~MainWindow()
@@ -107,7 +107,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::SetupUi()
 {
-    setWindowTitle("Scrambler");
+    setWindowTitle("Scrambler 1.4");
     setMinimumSize(520, 600);
 
     auto* central = new QWidget();
@@ -1121,17 +1121,17 @@ void MainWindow::StartPipeline()
 
     if (auto result = flow_tracker_->Start(); !result)
     {
-        UpdateDriverStatus(QString::fromUtf8(core::ToUserMessage(result.error())), true);
+        UpdatePipelineStatus(QString::fromUtf8(core::ToUserMessage(result.error())), true);
         flow_tracker_.reset();
         return;
     }
 
-    interceptor_ = std::make_unique<core::PacketInterceptor>(*flow_tracker_, targets_, effects_);
+    interceptor_ = std::make_unique<core::PacketInterceptor>(*flow_tracker_, target_pids_, effects_);
     interceptor_->SetFatalCallback(std::move(fatal_handler));
 
     if (auto result = interceptor_->Start(); !result)
     {
-        UpdateDriverStatus(QString::fromUtf8(core::ToUserMessage(result.error())), true);
+        UpdatePipelineStatus(QString::fromUtf8(core::ToUserMessage(result.error())), true);
         // Reset interceptor first since it holds a reference to *flow_tracker_.
         interceptor_.reset();
         flow_tracker_.reset();
@@ -1141,7 +1141,7 @@ void MainWindow::StartPipeline()
     running_ = true;
     refresh_timer_->stop();
     start_stop_button_->setText("Stop");
-    UpdateDriverStatus("Running", false);
+    UpdatePipelineStatus("Running", false);
     PlayToggleSound(true);
 }
 
@@ -1154,7 +1154,7 @@ void MainWindow::OnPipelineFatal(uint32_t gle)
     }
 
     StopPipeline();
-    UpdateDriverStatus(QString("Pipeline stopped unexpectedly (GLE=%1)").arg(gle), true);
+    UpdatePipelineStatus(QString("Pipeline stopped unexpectedly (GLE=%1)").arg(gle), true);
 }
 
 void MainWindow::StopPipeline()
@@ -1180,7 +1180,7 @@ void MainWindow::StopPipeline()
     refresh_timer_->start(5000);
     RefreshProcessList();
     start_stop_button_->setText("Start");
-    UpdateDriverStatus("Stopped", false);
+    UpdatePipelineStatus("Stopped", false);
     PlayToggleSound(false);
 }
 
@@ -1266,7 +1266,7 @@ void MainWindow::OnProcessSelectionChanged()
     }
 
     auto pid = selected.first()->text(0).toUInt();
-    targets_.SetSingle(pid);
+    target_pids_.SetSelectedPid(pid);
 }
 
 void MainWindow::OnProcessFilterChanged(const QString& text)
@@ -1320,7 +1320,7 @@ void MainWindow::OnProcessListReady()
         item->setText(0, QString::number(proc.pid));
         item->setText(1, QString::fromStdString(proc.name));
         item->setData(0, Qt::UserRole, proc.pid);
-        item->setIcon(1, IconToExePath(proc.exe_path));
+        item->setIcon(1, IconForExePath(proc.exe_path));
         pid_to_item[proc.pid] = item;
     }
 
@@ -1363,7 +1363,7 @@ void MainWindow::OnProcessListReady()
     OnProcessFilterChanged(process_filter_->text());
 }
 
-void MainWindow::UpdateDriverStatus(const QString& message, bool is_error)
+void MainWindow::UpdatePipelineStatus(const QString& message, bool is_error)
 {
     status_label_->setText(message);
     if (is_error)
@@ -1376,7 +1376,7 @@ void MainWindow::UpdateDriverStatus(const QString& message, bool is_error)
     }
 }
 
-QIcon MainWindow::IconToExePath(const std::wstring& exe_path)
+QIcon MainWindow::IconForExePath(const std::wstring& exe_path)
 {
     if (exe_path.empty())
     {

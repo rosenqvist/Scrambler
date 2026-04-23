@@ -4,140 +4,162 @@
 #include <thread>
 #include <vector>
 
-using scrambler::core::TargetSet;
+using scrambler::core::TargetPidSet;
 
 // Basic operations
 
-TEST(TargetSetTest, EmptySetContainsNothing)
+TEST(TargetPidSetTest, EmptySetContainsNothing)
 {
-    TargetSet targets;
+    TargetPidSet target_pids;
 
-    EXPECT_FALSE(targets.Contains(1));
-    EXPECT_FALSE(targets.Contains(0));
-    EXPECT_FALSE(targets.Contains(99999));
+    EXPECT_FALSE(target_pids.Contains(1));
+    EXPECT_FALSE(target_pids.Contains(0));
+    EXPECT_FALSE(target_pids.Contains(99999));
 }
 
-TEST(TargetSetTest, AddedPidIsFound)
+TEST(TargetPidSetTest, AddedPidIsFound)
 {
-    TargetSet targets;
-    targets.Add(1234);
+    TargetPidSet target_pids;
+    target_pids.Add(1234);
 
-    EXPECT_TRUE(targets.Contains(1234));
+    EXPECT_TRUE(target_pids.Contains(1234));
 }
 
-TEST(TargetSetTest, UnrelatedPidIsNotFound)
+TEST(TargetPidSetTest, UnrelatedPidIsNotFound)
 {
-    TargetSet targets;
-    targets.Add(1234);
+    TargetPidSet target_pids;
+    target_pids.Add(1234);
 
-    EXPECT_FALSE(targets.Contains(5678));
+    EXPECT_FALSE(target_pids.Contains(5678));
 }
 
-TEST(TargetSetTest, MultiplePidsCoexist)
+TEST(TargetPidSetTest, MultiplePidsCoexist)
 {
-    TargetSet targets;
-    targets.Add(100);
-    targets.Add(200);
-    targets.Add(300);
+    TargetPidSet target_pids;
+    target_pids.Add(100);
+    target_pids.Add(200);
+    target_pids.Add(300);
 
-    EXPECT_TRUE(targets.Contains(100));
-    EXPECT_TRUE(targets.Contains(200));
-    EXPECT_TRUE(targets.Contains(300));
-    EXPECT_FALSE(targets.Contains(400));
+    EXPECT_TRUE(target_pids.Contains(100));
+    EXPECT_TRUE(target_pids.Contains(200));
+    EXPECT_TRUE(target_pids.Contains(300));
+    EXPECT_FALSE(target_pids.Contains(400));
 }
 
-TEST(TargetSetTest, DuplicateAddIsHarmless)
+TEST(TargetPidSetTest, DuplicateAddIsHarmless)
 {
-    TargetSet targets;
-    targets.Add(100);
-    targets.Add(100);
-    targets.Add(100);
+    TargetPidSet target_pids;
+    target_pids.Add(100);
+    target_pids.Add(100);
+    target_pids.Add(100);
 
-    EXPECT_TRUE(targets.Contains(100));
+    EXPECT_TRUE(target_pids.Contains(100));
 
-    targets.Remove(100);
-    EXPECT_FALSE(targets.Contains(100));
+    target_pids.Remove(100);
+    EXPECT_FALSE(target_pids.Contains(100));
 }
 
 //  Remove
 
-TEST(TargetSetTest, RemoveDeletesOnlyThatPid)
+TEST(TargetPidSetTest, RemoveDeletesOnlyThatPid)
 {
-    TargetSet targets;
-    targets.Add(100);
-    targets.Add(200);
+    TargetPidSet target_pids;
+    target_pids.Add(100);
+    target_pids.Add(200);
 
-    targets.Remove(100);
+    target_pids.Remove(100);
 
-    EXPECT_FALSE(targets.Contains(100));
-    EXPECT_TRUE(targets.Contains(200));
+    EXPECT_FALSE(target_pids.Contains(100));
+    EXPECT_TRUE(target_pids.Contains(200));
 }
 
-TEST(TargetSetTest, RemoveOnMissingPidDoesNothing)
+TEST(TargetPidSetTest, RemoveOnMissingPidDoesNothing)
 {
-    TargetSet targets;
-    targets.Add(100);
+    TargetPidSet target_pids;
+    target_pids.Add(100);
 
-    targets.Remove(999);
+    target_pids.Remove(999);
 
-    EXPECT_TRUE(targets.Contains(100));
+    EXPECT_TRUE(target_pids.Contains(100));
 }
 
 //  Clear All
 
-TEST(TargetSetTest, ClearRemovesEverything)
+TEST(TargetPidSetTest, ClearRemovesEverything)
 {
-    TargetSet targets;
-    targets.Add(100);
-    targets.Add(200);
-    targets.Add(300);
+    TargetPidSet target_pids;
+    target_pids.Add(100);
+    target_pids.Add(200);
+    target_pids.Add(300);
 
-    targets.Clear();
+    target_pids.Clear();
 
-    EXPECT_FALSE(targets.Contains(100));
-    EXPECT_FALSE(targets.Contains(200));
-    EXPECT_FALSE(targets.Contains(300));
+    EXPECT_FALSE(target_pids.Contains(100));
+    EXPECT_FALSE(target_pids.Contains(200));
+    EXPECT_FALSE(target_pids.Contains(300));
 }
 
-//  SetSingle
+//  SetSelectedPid
 
-TEST(TargetSetTest, SetSingleReplacesExistingPids)
+TEST(TargetPidSetTest, SetSelectedPidReplacesExistingPids)
 {
-    TargetSet targets;
-    targets.Add(100);
-    targets.Add(200);
+    TargetPidSet target_pids;
+    target_pids.Add(100);
+    target_pids.Add(200);
 
-    targets.SetSingle(300);
+    target_pids.SetSelectedPid(300);
 
-    EXPECT_FALSE(targets.Contains(100));
-    EXPECT_FALSE(targets.Contains(200));
-    EXPECT_TRUE(targets.Contains(300));
+    EXPECT_FALSE(target_pids.Contains(100));
+    EXPECT_FALSE(target_pids.Contains(200));
+    EXPECT_TRUE(target_pids.Contains(300));
 }
 
-TEST(TargetSetTest, SetSingleOnEmptySetAddsOne)
+TEST(TargetPidSetTest, SetSelectedPidOnEmptySetAddsOne)
 {
-    TargetSet targets;
+    TargetPidSet target_pids;
 
-    targets.SetSingle(42);
+    target_pids.SetSelectedPid(42);
 
-    EXPECT_TRUE(targets.Contains(42));
+    EXPECT_TRUE(target_pids.Contains(42));
 }
 
-TEST(TargetSetTest, SetSingleThenSetSingleReplaces)
+TEST(TargetPidSetTest, SetSelectedPidThenSetSelectedPidReplaces)
 {
-    TargetSet targets;
-    targets.SetSingle(100);
-    targets.SetSingle(200);
+    TargetPidSet target_pids;
+    target_pids.SetSelectedPid(100);
+    target_pids.SetSelectedPid(200);
 
-    EXPECT_FALSE(targets.Contains(100));
-    EXPECT_TRUE(targets.Contains(200));
+    EXPECT_FALSE(target_pids.Contains(100));
+    EXPECT_TRUE(target_pids.Contains(200));
+}
+
+TEST(TargetPidSetTest, AddAfterSetSelectedPidKeepsBothPidsVisible)
+{
+    TargetPidSet target_pids;
+    target_pids.SetSelectedPid(100);
+    target_pids.Add(200);
+
+    EXPECT_TRUE(target_pids.Contains(100));
+    EXPECT_TRUE(target_pids.Contains(200));
+}
+
+TEST(TargetPidSetTest, RemoveFallsBackToRemainingSelectedPid)
+{
+    TargetPidSet target_pids;
+    target_pids.Add(100);
+    target_pids.Add(200);
+
+    target_pids.Remove(100);
+
+    EXPECT_FALSE(target_pids.Contains(100));
+    EXPECT_TRUE(target_pids.Contains(200));
 }
 
 //  Thread safety
 
-TEST(TargetSetTest, ConcurrentAddsAndContains)
+TEST(TargetPidSetTest, ConcurrentAddsAndContains)
 {
-    TargetSet targets;
+    TargetPidSet target_pids;
     constexpr int kThreads = 8;
     constexpr int kOpsPerThread = 1000;
 
@@ -145,19 +167,19 @@ TEST(TargetSetTest, ConcurrentAddsAndContains)
     threads.reserve(kThreads);
     for (int i = 0; i < kThreads; ++i)
     {
-        threads.emplace_back([&targets, i]
+        threads.emplace_back([&target_pids, i]
         {
             for (int j = 0; j < kOpsPerThread; ++j)
             {
                 auto pid = static_cast<uint32_t>((i * kOpsPerThread) + j);
-                targets.Add(pid);
-                targets.Contains(pid);
+                target_pids.Add(pid);
+                target_pids.Contains(pid);
             }
         });
     }
 
     threads.clear();  // joins all
 
-    EXPECT_TRUE(targets.Contains(0));
-    EXPECT_TRUE(targets.Contains((kThreads * kOpsPerThread) - 1));
+    EXPECT_TRUE(target_pids.Contains(0));
+    EXPECT_TRUE(target_pids.Contains((kThreads * kOpsPerThread) - 1));
 }

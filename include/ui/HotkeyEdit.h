@@ -53,8 +53,7 @@ protected:
                 vk = VK_XBUTTON2;
                 break;
 
-            // Disallow, left,right and middle button clicks
-            // binding these will cause a UX nightmare
+            // Ignore primary mouse buttons to avoid unusable bindings.
             case Qt::LeftButton:
             case Qt::RightButton:
             case Qt::MiddleButton:
@@ -62,7 +61,7 @@ protected:
                 return;
         }
 
-        // Capture modifiers (like Ctrl + Mouse 4)
+        // Capture modifiers such as Ctrl + Mouse 4.
         UINT hotkey_mods = 0;
         if ((event->modifiers() & Qt::ControlModifier) != 0)
         {
@@ -165,7 +164,6 @@ private:
         }
         else
         {
-            // Keep your existing MapVirtualKeyW logic here for standard keys
             UINT scan = MapVirtualKeyW(binding.vk, MAPVK_VK_TO_VSC);
             std::array<wchar_t, 64> name{};
             if (GetKeyNameTextW(static_cast<LONG>(scan) << 16, name.data(), static_cast<int>(name.size())) > 0)

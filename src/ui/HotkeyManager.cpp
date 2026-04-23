@@ -233,17 +233,15 @@ Qt::KeyboardModifiers Win32ModsToQt(UINT mods)
 
 HotkeyManager::HotkeyManager(QObject* parent) : QObject(parent)
 {
-    instance = this;  // Set the singleton pointer
+    instance = this;
     LoadSettings();
-    RegisterAll();
+    InstallHooks();
 }
 
 HotkeyManager::~HotkeyManager()
 {
-    // Null the singleton first so any in-flight hook callback sees null and
-    // bails before touching bindings_, which is about to be destroyed.
     instance.store(nullptr, std::memory_order_release);
-    UnregisterAll();
+    RemoveHooks();
 }
 
 void HotkeyManager::SetBinding(HotkeyAction action, const HotkeyBinding& binding)
@@ -257,14 +255,14 @@ void HotkeyManager::SetBinding(HotkeyAction action, const HotkeyBinding& binding
     bool was_registered = registered_;
     if (was_registered)
     {
-        UnregisterAll();
+        RemoveHooks();
     }
 
     bindings_.at(static_cast<std::size_t>(action)) = binding;
 
     if (was_registered)
     {
-        RegisterAll();
+        InstallHooks();
     }
     SaveSettings();
 }
@@ -279,9 +277,9 @@ HotkeyBinding HotkeyManager::GetBinding(HotkeyAction action) const
     return bindings_.at(static_cast<std::size_t>(action));
 }
 
-void HotkeyManager::RegisterAll()
+void HotkeyManager::InstallHooks()
 {
-    UnregisterAll();
+    RemoveHooks();
 
     HHOOK kb = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardHookProc, GetModuleHandle(nullptr), 0);
     const DWORD kb_error = (kb == nullptr) ? GetLastError() : ERROR_SUCCESS;
@@ -313,7 +311,7 @@ void HotkeyManager::RegisterAll()
     registered_ = (kb != nullptr) && (mouse != nullptr);
 }
 
-void HotkeyManager::UnregisterAll()
+void HotkeyManager::RemoveHooks()
 {
     if (auto* kb = keyboard_hook.exchange(nullptr, std::memory_order_acq_rel))
     {

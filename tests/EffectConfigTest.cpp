@@ -354,22 +354,22 @@ TEST(EffectConfigTest, DefaultsAreInert)
 {
     EffectConfig effects;
 
-    EXPECT_EQ(effects.Direction(true).DelayMs(), 0);
-    EXPECT_EQ(effects.Direction(false).DelayMs(), 0);
-    EXPECT_EQ(effects.Direction(true).ThrottleKBytesPerSec(), 0);
-    EXPECT_EQ(effects.Direction(false).ThrottleKBytesPerSec(), 0);
-    EXPECT_EQ(effects.Direction(true).DropRate(), 0.0F);
-    EXPECT_EQ(effects.Direction(false).DropRate(), 0.0F);
-    EXPECT_FALSE(effects.Direction(true).BurstDropEnabled());
-    EXPECT_FALSE(effects.Direction(false).BurstDropEnabled());
-    EXPECT_FLOAT_EQ(effects.Direction(true).BurstDropRate(), 0.0F);
-    EXPECT_FLOAT_EQ(effects.Direction(false).BurstDropRate(), 0.0F);
-    EXPECT_EQ(effects.Direction(true).BurstDropLength(), kDefaultBurstDropLength);
-    EXPECT_EQ(effects.Direction(false).BurstDropLength(), kDefaultBurstDropLength);
-    EXPECT_EQ(effects.Direction(true).DuplicateRate(), 0.0F);
-    EXPECT_EQ(effects.Direction(false).DuplicateRate(), 0.0F);
-    EXPECT_EQ(effects.Direction(true).DuplicateCount(), kDefaultDuplicateCopies);
-    EXPECT_EQ(effects.Direction(false).DuplicateCount(), kDefaultDuplicateCopies);
+    EXPECT_EQ(effects.ConfigForDirection(true).DelayMs(), 0);
+    EXPECT_EQ(effects.ConfigForDirection(false).DelayMs(), 0);
+    EXPECT_EQ(effects.ConfigForDirection(true).ThrottleKBytesPerSec(), 0);
+    EXPECT_EQ(effects.ConfigForDirection(false).ThrottleKBytesPerSec(), 0);
+    EXPECT_EQ(effects.ConfigForDirection(true).DropRate(), 0.0F);
+    EXPECT_EQ(effects.ConfigForDirection(false).DropRate(), 0.0F);
+    EXPECT_FALSE(effects.ConfigForDirection(true).BurstDropEnabled());
+    EXPECT_FALSE(effects.ConfigForDirection(false).BurstDropEnabled());
+    EXPECT_FLOAT_EQ(effects.ConfigForDirection(true).BurstDropRate(), 0.0F);
+    EXPECT_FLOAT_EQ(effects.ConfigForDirection(false).BurstDropRate(), 0.0F);
+    EXPECT_EQ(effects.ConfigForDirection(true).BurstDropLength(), kDefaultBurstDropLength);
+    EXPECT_EQ(effects.ConfigForDirection(false).BurstDropLength(), kDefaultBurstDropLength);
+    EXPECT_EQ(effects.ConfigForDirection(true).DuplicateRate(), 0.0F);
+    EXPECT_EQ(effects.ConfigForDirection(false).DuplicateRate(), 0.0F);
+    EXPECT_EQ(effects.ConfigForDirection(true).DuplicateCount(), kDefaultDuplicateCopies);
+    EXPECT_EQ(effects.ConfigForDirection(false).DuplicateCount(), kDefaultDuplicateCopies);
     EXPECT_EQ(effects.Delay(true).count(), 0);
     EXPECT_EQ(effects.Delay(false).count(), 0);
     EXPECT_EQ(effects.DelayJitter(true).count(), 0);

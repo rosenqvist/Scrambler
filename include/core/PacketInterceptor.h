@@ -22,7 +22,7 @@ public:
     // thread when the loop exits due to a terminal error or repeated failures.
     using FatalCallback = std::function<void(uint32_t)>;
 
-    PacketInterceptor(FlowTracker& flow_tracker, const TargetSet& targets, const EffectConfig& effects);
+    PacketInterceptor(FlowTracker& flow_tracker, const TargetPidSet& target_pids, const EffectConfig& effects);
     ~PacketInterceptor();
 
     PacketInterceptor(const PacketInterceptor&) = delete;
@@ -42,7 +42,7 @@ private:
     void NotifyFatal(uint32_t gle);
 
     FlowTracker& flow_tracker_;
-    const TargetSet& targets_;
+    const TargetPidSet& target_pids_;
     PacketEffectEngine effect_engine_;
     std::unique_ptr<DelayQueue> delay_queue_;
     std::jthread thread_;

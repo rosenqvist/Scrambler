@@ -28,8 +28,10 @@
 namespace scrambler::core
 {
 
-PacketInterceptor::PacketInterceptor(FlowTracker& flow_tracker, const TargetSet& targets, const EffectConfig& effects)
-    : flow_tracker_(flow_tracker), targets_(targets), effect_engine_(effects)
+PacketInterceptor::PacketInterceptor(FlowTracker& flow_tracker,
+                                     const TargetPidSet& target_pids,
+                                     const EffectConfig& effects)
+    : flow_tracker_(flow_tracker), target_pids_(target_pids), effect_engine_(effects)
 {
 }
 
@@ -234,13 +236,23 @@ void PacketInterceptor::CaptureLoop()
                 == 0)
             {
                 static std::atomic<uint64_t> occurrences{0};
-                LogRateLimited(
-                    occurrences,
-                    LogLevel::kWarn,
-                    "PacketInterceptor: WinDivertHelperParsePacket failed, abandoning rest of batch ({} of {})",
-                    i,
-                    num_packets);
+                LogRateLimited(occurrences,
+                               LogLevel::kWarn,
+                               "PacketInterceptor: WinDivertHelperParsePacket failed, reinjecting the rest of the "
+                               "batch unchanged ({} of {})",
+                               i,
+                               num_packets);
                 CountEvent(Counter::kParseFailures);
+
+                const auto previous_size = send_buf.size();
+                send_buf.resize(previous_size + current_remaining);
+                std::memcpy(send_buf.data() + previous_size, current_pkt, current_remaining);
+
+                for (unsigned int j = i; j < num_packets; ++j)
+                {
+                    send_addrs.push_back(recv_addrs.at(static_cast<size_t>(j)));
+                }
+
                 break;
             }
 
@@ -252,7 +264,7 @@ void PacketInterceptor::CaptureLoop()
                 auto tuple = TupleFromPacket(*ip, *udp);
                 auto pid = flow_tracker_.LookupPid(tuple, addr.Outbound != 0);
 
-                if (pid != 0 && targets_.Contains(pid))
+                if (pid != 0 && target_pids_.Contains(pid))
                 {
                     const bool is_outbound = addr.Outbound != 0;
                     const auto now = std::chrono::steady_clock::now();
@@ -284,10 +296,9 @@ void PacketInterceptor::CaptureLoop()
                         if (emission.ScheduledCount() > 0)
                         {
 #ifndef NDEBUG
-                            const auto scheduled_delay =
-                                (std::max)(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                               emission.scheduled_packets.front().release_at - now),
-                                           std::chrono::milliseconds::zero());
+                            const auto release_delay = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                emission.scheduled_packets.front().release_at - now);
+                            const auto scheduled_delay = (std::max)(release_delay, std::chrono::milliseconds::zero());
                             auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
                             const char* schedule_label = emission.HasEffect(PacketEffectKind::kBandwidthThrottle)
                                                                  && !emission.HasEffect(PacketEffectKind::kDelay)

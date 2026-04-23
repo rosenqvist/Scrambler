@@ -4,6 +4,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <limits>
 #include <mutex>
 #include <random>
 #include <unordered_set>
@@ -192,105 +193,105 @@ public:
 
     [[nodiscard]] DirectionEffectSnapshot Snapshot(bool is_outbound) const
     {
-        return Direction(is_outbound).Snapshot();
+        return ConfigForDirection(is_outbound).Snapshot();
     }
 
     [[nodiscard]] std::chrono::milliseconds Delay(bool is_outbound) const
     {
-        return Direction(is_outbound).Delay();
+        return ConfigForDirection(is_outbound).Delay();
     }
 
     [[nodiscard]] std::chrono::milliseconds DelayJitter(bool is_outbound) const
     {
-        return Direction(is_outbound).DelayJitter();
+        return ConfigForDirection(is_outbound).DelayJitter();
     }
 
     [[nodiscard]] int ThrottleKBytesPerSec(bool is_outbound) const
     {
-        return Direction(is_outbound).ThrottleKBytesPerSec();
+        return ConfigForDirection(is_outbound).ThrottleKBytesPerSec();
     }
 
     [[nodiscard]] bool BurstDropEnabled(bool is_outbound) const
     {
-        return Direction(is_outbound).BurstDropEnabled();
+        return ConfigForDirection(is_outbound).BurstDropEnabled();
     }
 
     [[nodiscard]] float BurstDropRate(bool is_outbound) const
     {
-        return Direction(is_outbound).BurstDropRate();
+        return ConfigForDirection(is_outbound).BurstDropRate();
     }
 
     [[nodiscard]] int BurstDropLength(bool is_outbound) const
     {
-        return Direction(is_outbound).BurstDropLength();
+        return ConfigForDirection(is_outbound).BurstDropLength();
     }
 
     [[nodiscard]] float DropRate(bool is_outbound) const
     {
-        return Direction(is_outbound).DropRate();
+        return ConfigForDirection(is_outbound).DropRate();
     }
 
     [[nodiscard]] float DuplicateRate(bool is_outbound) const
     {
-        return Direction(is_outbound).DuplicateRate();
+        return ConfigForDirection(is_outbound).DuplicateRate();
     }
 
     [[nodiscard]] int DuplicateCount(bool is_outbound) const
     {
-        return Direction(is_outbound).DuplicateCount();
+        return ConfigForDirection(is_outbound).DuplicateCount();
     }
 
     void SetDelayMs(bool is_outbound, int delay_ms)
     {
-        Direction(is_outbound).SetDelayMs(delay_ms);
+        ConfigForDirection(is_outbound).SetDelayMs(delay_ms);
     }
 
     void SetDelayJitterMs(bool is_outbound, int delay_jitter_ms)
     {
-        Direction(is_outbound).SetDelayJitterMs(delay_jitter_ms);
+        ConfigForDirection(is_outbound).SetDelayJitterMs(delay_jitter_ms);
     }
 
     void SetThrottleKBytesPerSec(bool is_outbound, int throttle_kbytes_per_sec)
     {
-        Direction(is_outbound).SetThrottleKBytesPerSec(throttle_kbytes_per_sec);
+        ConfigForDirection(is_outbound).SetThrottleKBytesPerSec(throttle_kbytes_per_sec);
     }
 
     void SetBurstDropEnabled(bool is_outbound, bool enabled)
     {
-        Direction(is_outbound).SetBurstDropEnabled(enabled);
+        ConfigForDirection(is_outbound).SetBurstDropEnabled(enabled);
     }
 
     void SetBurstDropRate(bool is_outbound, float burst_drop_rate)
     {
-        Direction(is_outbound).SetBurstDropRate(burst_drop_rate);
+        ConfigForDirection(is_outbound).SetBurstDropRate(burst_drop_rate);
     }
 
     void SetBurstDropLength(bool is_outbound, int burst_drop_length)
     {
-        Direction(is_outbound).SetBurstDropLength(burst_drop_length);
+        ConfigForDirection(is_outbound).SetBurstDropLength(burst_drop_length);
     }
 
     void SetDropRate(bool is_outbound, float drop_rate)
     {
-        Direction(is_outbound).SetDropRate(drop_rate);
+        ConfigForDirection(is_outbound).SetDropRate(drop_rate);
     }
 
     void SetDuplicateRate(bool is_outbound, float duplicate_rate)
     {
-        Direction(is_outbound).SetDuplicateRate(duplicate_rate);
+        ConfigForDirection(is_outbound).SetDuplicateRate(duplicate_rate);
     }
 
     void SetDuplicateCount(bool is_outbound, int duplicate_count)
     {
-        Direction(is_outbound).SetDuplicateCount(duplicate_count);
+        ConfigForDirection(is_outbound).SetDuplicateCount(duplicate_count);
     }
 
-    [[nodiscard]] DirectionEffectConfig& Direction(bool is_outbound)
+    [[nodiscard]] DirectionEffectConfig& ConfigForDirection(bool is_outbound)
     {
         return is_outbound ? outbound : inbound;
     }
 
-    [[nodiscard]] const DirectionEffectConfig& Direction(bool is_outbound) const
+    [[nodiscard]] const DirectionEffectConfig& ConfigForDirection(bool is_outbound) const
     {
         return is_outbound ? outbound : inbound;
     }
@@ -322,43 +323,68 @@ inline bool ShouldDrop(float rate)
     return ShouldApplyRate(rate, rng);
 }
 
-class TargetSet
+class TargetPidSet
 {
 public:
     void Add(uint32_t pid)
     {
         const std::scoped_lock lock(mutex_);
         pids_.insert(pid);
+        RefreshCachedPidLocked();
     }
 
     void Remove(uint32_t pid)
     {
         const std::scoped_lock lock(mutex_);
         pids_.erase(pid);
+        RefreshCachedPidLocked();
     }
 
     void Clear()
     {
         const std::scoped_lock lock(mutex_);
         pids_.clear();
+        cached_pid_.store(kNoCachedPid, std::memory_order_release);
     }
 
-    void SetSingle(uint32_t pid)
+    void SetSelectedPid(uint32_t pid)
     {
         const std::scoped_lock lock(mutex_);
         pids_.clear();
         pids_.insert(pid);
+        cached_pid_.store(pid, std::memory_order_release);
     }
 
     bool Contains(uint32_t pid) const
     {
+        const uint32_t cached_pid = cached_pid_.load(std::memory_order_acquire);
+        if (cached_pid != kNoCachedPid)
+        {
+            return cached_pid == pid;
+        }
+
         const std::scoped_lock lock(mutex_);
         return pids_.contains(pid);
     }
 
 private:
+    void RefreshCachedPidLocked()
+    {
+        if (pids_.size() == 1)
+        {
+            cached_pid_.store(*pids_.begin(), std::memory_order_release);
+        }
+        else
+        {
+            cached_pid_.store(kNoCachedPid, std::memory_order_release);
+        }
+    }
+
+    static constexpr uint32_t kNoCachedPid = (std::numeric_limits<uint32_t>::max)();
+
     mutable std::mutex mutex_;
     std::unordered_set<uint32_t> pids_;
+    std::atomic<uint32_t> cached_pid_{kNoCachedPid};
 };
 
 }  // namespace scrambler::core

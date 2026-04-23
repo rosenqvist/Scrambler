@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdint>
 #include <numbers>
+#include <utility>
 
 namespace scrambler::ui
 {
@@ -83,6 +84,13 @@ void SoundPlayer::Cleanup()
         QObject::disconnect(sink, nullptr, this, nullptr);
         sink->stop();
         sink->deleteLater();
+    }
+
+    auto* buffer = std::exchange(buffer_, nullptr);
+    if (buffer)
+    {
+        buffer->close();
+        buffer->deleteLater();
     }
 }
 

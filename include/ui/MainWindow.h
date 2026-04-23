@@ -58,10 +58,10 @@ private:  // NOLINT(readability-redundant-access-specifiers)
     void SetupUi();
     void StartPipeline();
     void StopPipeline();
-    void UpdateDriverStatus(const QString& message, bool is_error);
+    void UpdatePipelineStatus(const QString& message, bool is_error);
     void PlayToggleSound(bool started);
     void OnProcessListReady();
-    QIcon IconToExePath(const std::wstring& exe_path);
+    QIcon IconForExePath(const std::wstring& exe_path);
 
     // --- Top-level layout ---
     QTabWidget* tab_widget_ = nullptr;
@@ -164,7 +164,7 @@ private:  // NOLINT(readability-redundant-access-specifiers)
     DiagnosticsTab* diagnostics_tab_ = nullptr;
 
     // --- Core pipeline ---
-    core::TargetSet targets_;
+    core::TargetPidSet target_pids_;
     core::EffectConfig effects_;
     std::unique_ptr<core::FlowTracker> flow_tracker_;
     std::unique_ptr<core::PacketInterceptor> interceptor_;

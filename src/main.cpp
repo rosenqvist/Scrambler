@@ -12,10 +12,6 @@
 #include <dwmapi.h>
 #include <winsvc.h>
 
-#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
-    #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
-#endif
-
 #ifndef DWMWA_CAPTION_COLOR
     #define DWMWA_CAPTION_COLOR 35
 #endif
@@ -56,7 +52,7 @@ int main(int argc, char* argv[])
 
     QApplication::setStyle("Fusion");
 
-    // Grey/Warm theme
+    // Warm neutral theme.
     QPalette palette;
     palette.setColor(QPalette::Window, QColor(226, 223, 218));
     palette.setColor(QPalette::WindowText, QColor(38, 36, 32));

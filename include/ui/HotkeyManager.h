@@ -50,8 +50,8 @@ public:
     void SetBinding(HotkeyAction action, const HotkeyBinding& binding);
     [[nodiscard]] HotkeyBinding GetBinding(HotkeyAction action) const;
 
-    void RegisterAll();
-    void UnregisterAll();
+    void InstallHooks();
+    void RemoveHooks();
     void SaveSettings();
     void LoadSettings();
 
