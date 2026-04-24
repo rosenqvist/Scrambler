@@ -52,6 +52,11 @@ namespace scrambler::ui
 
 namespace
 {
+constexpr int kProcessPidRole = Qt::UserRole;
+constexpr int kProcessCreationTimeRole = Qt::UserRole + 1;
+constexpr int kProcessExePathRole = Qt::UserRole + 2;
+constexpr int kTargetMonitorIntervalMs = 500;
+
 // Recursively filters the tree. A node is visible if it matches the text itself.
 bool FilterTreeItem(QTreeWidgetItem* item, const QString& text)
 {
@@ -77,11 +82,26 @@ bool FilterTreeItem(QTreeWidgetItem* item, const QString& text)
 
     return self_matches || any_descendant_matches;
 }
+
+platform::ProcessIdentity IdentityFromItem(const QTreeWidgetItem* item)
+{
+    if (item == nullptr)
+    {
+        return {};
+    }
+
+    return {
+        .pid = item->data(0, kProcessPidRole).toUInt(),
+        .creation_time = item->data(0, kProcessCreationTimeRole).toULongLong(),
+        .exe_path = item->data(0, kProcessExePathRole).toString().toStdWString(),
+    };
+}
 }  // namespace
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       refresh_timer_(new QTimer(this)),
+      target_monitor_timer_(new QTimer(this)),
       process_watcher_(new QFutureWatcher<std::vector<platform::ProcessInfo>>(this)),
       hotkey_manager_(new HotkeyManager(this)),
       sound_player_(new SoundPlayer(this))
@@ -90,6 +110,9 @@ MainWindow::MainWindow(QWidget* parent)
 
     connect(refresh_timer_, &QTimer::timeout, this, &MainWindow::RefreshProcessList);
     refresh_timer_->start(5000);
+
+    target_monitor_timer_->setInterval(kTargetMonitorIntervalMs);
+    connect(target_monitor_timer_, &QTimer::timeout, this, &MainWindow::CheckSelectedProcessIdentity);
 
     connect(process_watcher_,
             &QFutureWatcher<std::vector<platform::ProcessInfo>>::finished,
@@ -1108,6 +1131,19 @@ void MainWindow::StartPipeline()
         return;
     }
 
+    auto identity = IdentityFromItem(selected.first());
+    if (!platform::IsProcessIdentityCurrent(identity))
+    {
+        target_pids_.Clear();
+        selected_process_identity_ = {};
+        QMessageBox::warning(this, "Scrambler", "The selected process is no longer running. Select it again.");
+        RefreshProcessList();
+        return;
+    }
+
+    selected_process_identity_ = std::move(identity);
+    target_pids_.SetSelectedPid(selected_process_identity_.pid);
+
     // Hop from the capture thread to the UI thread. Using `this` as the
     // receiver for invokeMethod means the event gets dropped if MainWindow
     // dies first.
@@ -1140,6 +1176,7 @@ void MainWindow::StartPipeline()
 
     running_ = true;
     refresh_timer_->stop();
+    target_monitor_timer_->start();
     start_stop_button_->setText("Stop");
     UpdatePipelineStatus("Running", false);
     PlayToggleSound(true);
@@ -1177,11 +1214,30 @@ void MainWindow::StopPipeline()
     }
 
     running_ = false;
+    target_monitor_timer_->stop();
     refresh_timer_->start(5000);
     RefreshProcessList();
     start_stop_button_->setText("Start");
     UpdatePipelineStatus("Stopped", false);
     PlayToggleSound(false);
+}
+
+void MainWindow::CheckSelectedProcessIdentity()
+{
+    if (!running_)
+    {
+        return;
+    }
+
+    if (platform::IsProcessIdentityCurrent(selected_process_identity_))
+    {
+        return;
+    }
+
+    target_pids_.Clear();
+    selected_process_identity_ = {};
+    StopPipeline();
+    UpdatePipelineStatus("Selected process exited or was replaced; stopped.", true);
 }
 
 void MainWindow::OnHotkeyTriggered(HotkeyAction action)
@@ -1262,11 +1318,20 @@ void MainWindow::OnProcessSelectionChanged()
     auto selected = process_tree_->selectedItems();
     if (selected.isEmpty())
     {
+        selected_process_identity_ = {};
+        target_pids_.Clear();
         return;
     }
 
-    auto pid = selected.first()->text(0).toUInt();
-    target_pids_.SetSelectedPid(pid);
+    selected_process_identity_ = IdentityFromItem(selected.first());
+    if (selected_process_identity_.IsValid())
+    {
+        target_pids_.SetSelectedPid(selected_process_identity_.pid);
+    }
+    else
+    {
+        target_pids_.Clear();
+    }
 }
 
 void MainWindow::OnProcessFilterChanged(const QString& text)
@@ -1319,7 +1384,9 @@ void MainWindow::OnProcessListReady()
         auto* item = new QTreeWidgetItem();
         item->setText(0, QString::number(proc.pid));
         item->setText(1, QString::fromStdString(proc.name));
-        item->setData(0, Qt::UserRole, proc.pid);
+        item->setData(0, kProcessPidRole, proc.pid);
+        item->setData(0, kProcessCreationTimeRole, QString::number(proc.creation_time));
+        item->setData(0, kProcessExePathRole, QString::fromStdWString(proc.exe_path));
         item->setIcon(1, IconForExePath(proc.exe_path));
         pid_to_item[proc.pid] = item;
     }

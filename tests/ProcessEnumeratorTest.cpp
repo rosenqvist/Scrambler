@@ -1,7 +1,11 @@
 #include "platform/ProcessEnumerator.h"
 
+#include <windows.h>
+
 #include <gtest/gtest.h>
 
+using scrambler::platform::GetProcessIdentity;
+using scrambler::platform::IsProcessIdentityCurrent;
 using scrambler::platform::StartsWithInsensitive;
 using scrambler::platform::IsSystemProcessPath;
 
@@ -39,4 +43,16 @@ TEST(IsSystemProcessPathTest, EmptyPathTreatedAsSystem)
 TEST(IsSystemProcessPathTest, UserPathNotSystem)
 {
     EXPECT_FALSE(IsSystemProcessPath(L"D:\\Games\\cs2.exe"));
+}
+
+TEST(ProcessIdentityTest, EmptyIdentityIsNotCurrent)
+{
+    EXPECT_FALSE(IsProcessIdentityCurrent({}));
+}
+
+TEST(ProcessIdentityTest, CurrentProcessIdentityIsCurrent)
+{
+    auto identity = GetProcessIdentity(GetCurrentProcessId()).value_or({});
+    ASSERT_TRUE(identity.IsValid());
+    EXPECT_TRUE(IsProcessIdentityCurrent(identity));
 }

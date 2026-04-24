@@ -95,7 +95,7 @@ std::expected<void, StartupError> FlowTracker::Start()
         return std::unexpected(StartupError::kAlreadyRunning);
     }
 
-    handle_ = WinDivertOpen("udp", WINDIVERT_LAYER_FLOW, 0, WINDIVERT_FLAG_SNIFF | WINDIVERT_FLAG_RECV_ONLY);
+    handle_ = WinDivertOpen("udp and ip", WINDIVERT_LAYER_FLOW, 0, WINDIVERT_FLAG_SNIFF | WINDIVERT_FLAG_RECV_ONLY);
 
     if (handle_ == INVALID_HANDLE_VALUE)
     {

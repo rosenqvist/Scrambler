@@ -48,6 +48,7 @@ private slots:
     void OnProcessSelectionChanged();
     void RefreshProcessList();
     void OnHotkeyTriggered(HotkeyAction action);
+    void CheckSelectedProcessIdentity();
     // Invoked on the UI thread (via queued connection) when the core pipeline
     // exits due to a terminal driver error. Tears down the pipeline and
     // visually show the GLE in the status bar.
@@ -72,9 +73,11 @@ private:  // NOLINT(readability-redundant-access-specifiers)
     QTreeWidget* process_tree_ = nullptr;
     QLineEdit* process_filter_ = nullptr;
     QTimer* refresh_timer_ = nullptr;
+    QTimer* target_monitor_timer_ = nullptr;
     QFutureWatcher<std::vector<platform::ProcessInfo>>* process_watcher_ = nullptr;
     bool refresh_in_flight_ = false;
     std::unordered_map<std::wstring, QIcon> icon_cache_;
+    platform::ProcessIdentity selected_process_identity_;
 
     // --- Effect controls ---
     QSlider* delay_slider_ = nullptr;

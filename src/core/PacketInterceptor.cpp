@@ -47,7 +47,7 @@ std::expected<void, StartupError> PacketInterceptor::Start()
         return std::unexpected(StartupError::kAlreadyRunning);
     }
 
-    handle_ = WinDivertOpen("udp", WINDIVERT_LAYER_NETWORK, 0, 0);
+    handle_ = WinDivertOpen("udp and ip", WINDIVERT_LAYER_NETWORK, 0, 0);
 
     if (handle_ == INVALID_HANDLE_VALUE)
     {
