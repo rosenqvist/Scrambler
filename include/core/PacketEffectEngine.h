@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <random>
+#include <utility>
 #include <vector>
 
 namespace scrambler::core
@@ -26,7 +27,7 @@ using PacketEffectMask = std::uint8_t;
 
 [[nodiscard]] constexpr PacketEffectMask ToMask(PacketEffectKind kind)
 {
-    return static_cast<PacketEffectMask>(kind);
+    return std::to_underlying(kind);
 }
 
 struct PacketEffectEmission

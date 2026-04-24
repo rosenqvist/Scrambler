@@ -8,6 +8,9 @@
 #include <QWindow>
 
 #include <atomic>
+#include <memory>
+#include <type_traits>
+#include <utility>
 #include <winuser.h>
 
 namespace scrambler::ui
@@ -21,6 +24,19 @@ namespace
 {
 
 constexpr const char* kSettingsGroup = "Hotkeys";
+
+struct HookCloser
+{
+    void operator()(HHOOK hook) const noexcept
+    {
+        if (hook != nullptr)
+        {
+            UnhookWindowsHookEx(hook);
+        }
+    }
+};
+
+using UniqueHook = std::unique_ptr<std::remove_pointer_t<HHOOK>, HookCloser>;
 
 const char* ActionToSettingsKey(HotkeyAction action)
 {
@@ -246,7 +262,7 @@ HotkeyManager::~HotkeyManager()
 
 void HotkeyManager::SetBinding(HotkeyAction action, const HotkeyBinding& binding)
 {
-    auto index = static_cast<std::size_t>(action);
+    const auto index = static_cast<std::size_t>(std::to_underlying(action));
     if (index >= kHotkeyActionCount)
     {
         return;
@@ -258,7 +274,7 @@ void HotkeyManager::SetBinding(HotkeyAction action, const HotkeyBinding& binding
         RemoveHooks();
     }
 
-    bindings_.at(static_cast<std::size_t>(action)) = binding;
+    bindings_.at(index) = binding;
 
     if (was_registered)
     {
@@ -269,46 +285,38 @@ void HotkeyManager::SetBinding(HotkeyAction action, const HotkeyBinding& binding
 
 HotkeyBinding HotkeyManager::GetBinding(HotkeyAction action) const
 {
-    auto index = static_cast<std::size_t>(action);
+    const auto index = static_cast<std::size_t>(std::to_underlying(action));
     if (index >= kHotkeyActionCount)
     {
         return {};
     }
-    return bindings_.at(static_cast<std::size_t>(action));
+    return bindings_.at(index);
 }
 
 void HotkeyManager::InstallHooks()
 {
     RemoveHooks();
 
-    HHOOK kb = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardHookProc, GetModuleHandle(nullptr), 0);
-    const DWORD kb_error = (kb == nullptr) ? GetLastError() : ERROR_SUCCESS;
-    HHOOK mouse = SetWindowsHookEx(WH_MOUSE_LL, MouseHookProc, GetModuleHandle(nullptr), 0);
-    const DWORD mouse_error = (mouse == nullptr) ? GetLastError() : ERROR_SUCCESS;
+    UniqueHook kb(SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardHookProc, GetModuleHandle(nullptr), 0));
+    const DWORD kb_error = (!kb) ? GetLastError() : ERROR_SUCCESS;
+    UniqueHook mouse(SetWindowsHookEx(WH_MOUSE_LL, MouseHookProc, GetModuleHandle(nullptr), 0));
+    const DWORD mouse_error = (!mouse) ? GetLastError() : ERROR_SUCCESS;
 
-    if (kb == nullptr || mouse == nullptr)
+    if (!kb || !mouse)
     {
-        if (kb != nullptr)
-        {
-            UnhookWindowsHookEx(kb);
-        }
-        if (mouse != nullptr)
-        {
-            UnhookWindowsHookEx(mouse);
-        }
-
         keyboard_hook.store(nullptr, std::memory_order_release);
         mouse_hook.store(nullptr, std::memory_order_release);
         registered_ = false;
 
-        qWarning() << "[HOTKEY] Failed to install hooks. Keyboard:" << (kb != nullptr) << "Mouse:" << (mouse != nullptr)
-                   << "KeyboardError:" << kb_error << "MouseError:" << mouse_error;
+        qWarning() << "[HOTKEY] Failed to install hooks. Keyboard:" << static_cast<bool>(kb)
+                   << "Mouse:" << static_cast<bool>(mouse) << "KeyboardError:" << kb_error
+                   << "MouseError:" << mouse_error;
         return;
     }
 
-    keyboard_hook.store(kb, std::memory_order_release);
-    mouse_hook.store(mouse, std::memory_order_release);
-    registered_ = (kb != nullptr) && (mouse != nullptr);
+    keyboard_hook.store(kb.release(), std::memory_order_release);
+    mouse_hook.store(mouse.release(), std::memory_order_release);
+    registered_ = true;
 }
 
 void HotkeyManager::RemoveHooks()
@@ -359,9 +367,9 @@ void HotkeyManager::CheckAndTrigger(UINT vk, UINT modifiers)
         return;
     }
 
-    for (int i = 0; i < kHotkeyActionCount; ++i)
+    for (std::size_t i = 0; i < kHotkeyActionCount; ++i)
     {
-        const auto& binding = bindings_.at(static_cast<std::size_t>(i));
+        const auto& binding = bindings_.at(i);
         if (binding.IsValid() && binding.vk == vk && binding.modifiers == modifiers)
         {
             emit HotkeyTriggered(static_cast<HotkeyAction>(i));
@@ -424,10 +432,10 @@ void HotkeyManager::SaveSettings()
     QSettings settings;
     settings.beginGroup(kSettingsGroup);
 
-    for (int i = 0; i < kHotkeyActionCount; ++i)
+    for (std::size_t i = 0; i < kHotkeyActionCount; ++i)
     {
         auto action = static_cast<HotkeyAction>(i);
-        const auto& binding = bindings_.at(static_cast<std::size_t>(i));
+        const auto& binding = bindings_.at(i);
         auto key = QString(ActionToSettingsKey(action));
         settings.setValue(key + "_mods", binding.modifiers);
         settings.setValue(key + "_vk", binding.vk);
@@ -441,10 +449,10 @@ void HotkeyManager::LoadSettings()
     QSettings settings;
     settings.beginGroup(kSettingsGroup);
 
-    for (int i = 0; i < kHotkeyActionCount; ++i)
+    for (std::size_t i = 0; i < kHotkeyActionCount; ++i)
     {
         auto action = static_cast<HotkeyAction>(i);
-        auto& binding = bindings_.at(static_cast<std::size_t>(i));
+        auto& binding = bindings_.at(i);
         auto key = QString(ActionToSettingsKey(action));
         binding.modifiers = settings.value(key + "_mods", 0).toUInt();
         binding.vk = settings.value(key + "_vk", 0).toUInt();

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
+#include <expected>
 #include <string>
 #include <vector>
 
@@ -29,11 +29,18 @@ struct ProcessInfo
     uint64_t creation_time;
 };
 
+enum class ProcessIdentityError : uint8_t
+{
+    kOpenFailed,
+    kImagePathUnavailable,
+    kCreationTimeUnavailable,
+};
+
 // Exposed for unit testing
 bool StartsWithInsensitive(const std::wstring& str, const std::wstring& prefix);
 bool IsSystemProcessPath(const std::wstring& path);
 
-std::optional<ProcessIdentity> GetProcessIdentity(uint32_t pid);
+std::expected<ProcessIdentity, ProcessIdentityError> GetProcessIdentity(uint32_t pid);
 bool IsProcessIdentityCurrent(const ProcessIdentity& identity);
 
 std::vector<ProcessInfo> EnumerateProcesses();

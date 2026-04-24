@@ -6,7 +6,9 @@
 #include <windows.h>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <utility>
 
 namespace scrambler::ui
 {
@@ -21,7 +23,7 @@ enum class HotkeyAction : std::uint8_t
     kCount,
 };
 
-inline constexpr int kHotkeyActionCount = static_cast<int>(HotkeyAction::kCount);
+inline constexpr std::size_t kHotkeyActionCount = std::to_underlying(HotkeyAction::kCount);
 
 struct HotkeyBinding
 {

@@ -5,14 +5,32 @@
 #include <windows.h>
 
 #include <array>
-#include <optional>
+#include <expected>
+#include <memory>
+#include <string>
+#include <string_view>
 #include <tlhelp32.h>
+#include <type_traits>
+#include <utility>
 
 namespace scrambler::platform
 {
 
 namespace
 {
+
+struct HandleCloser
+{
+    void operator()(HANDLE handle) const noexcept
+    {
+        if (handle != nullptr && handle != INVALID_HANDLE_VALUE)
+        {
+            CloseHandle(handle);
+        }
+    }
+};
+
+using UniqueHandle = std::unique_ptr<std::remove_pointer_t<HANDLE>, HandleCloser>;
 
 const std::wstring& GetWindowsDir()
 {
@@ -50,13 +68,39 @@ bool EqualsInsensitive(const std::wstring& lhs, const std::wstring& rhs)
     return _wcsnicmp(lhs.c_str(), rhs.c_str(), lhs.size()) == 0;
 }
 
-std::optional<ProcessIdentity> ReadProcessIdentity(HANDLE process, uint32_t pid)
+std::string WideToUtf8(std::wstring_view value)
+{
+    if (value.empty())
+    {
+        return {};
+    }
+
+    const auto input_len = static_cast<int>(value.size());
+    const wchar_t* const input = value.data();
+    const int required_len = WideCharToMultiByte(CP_UTF8, 0, input, input_len, nullptr, 0, nullptr, nullptr);
+    if (required_len <= 0)
+    {
+        return {};
+    }
+
+    std::string result;
+    result.resize_and_overwrite(static_cast<size_t>(required_len),
+                                [&](char* data, size_t size) noexcept
+    {
+        const int written =
+            WideCharToMultiByte(CP_UTF8, 0, input, input_len, data, static_cast<int>(size), nullptr, nullptr);
+        return written > 0 ? static_cast<size_t>(written) : 0U;
+    });
+    return result;
+}
+
+std::expected<ProcessIdentity, ProcessIdentityError> ReadProcessIdentity(HANDLE process, uint32_t pid)
 {
     std::array<wchar_t, MAX_PATH> path_buf{};
     auto path_size = static_cast<DWORD>(path_buf.size());
     if (QueryFullProcessImageNameW(process, 0, path_buf.data(), &path_size) == 0 || path_size == 0)
     {
-        return std::nullopt;
+        return std::unexpected(ProcessIdentityError::kImagePathUnavailable);
     }
 
     FILETIME creation_time{};
@@ -65,7 +109,7 @@ std::optional<ProcessIdentity> ReadProcessIdentity(HANDLE process, uint32_t pid)
     FILETIME user_time{};
     if (GetProcessTimes(process, &creation_time, &exit_time, &kernel_time, &user_time) == 0)
     {
-        return std::nullopt;
+        return std::unexpected(ProcessIdentityError::kCreationTimeUnavailable);
     }
 
     return ProcessIdentity{
@@ -99,17 +143,15 @@ bool IsSystemProcessPath(const std::wstring& path)
            || StartsWithInsensitive(path, win + L"\\SystemApps") || StartsWithInsensitive(path, win + L"\\WinSxS");
 }
 
-std::optional<ProcessIdentity> GetProcessIdentity(uint32_t pid)
+std::expected<ProcessIdentity, ProcessIdentityError> GetProcessIdentity(uint32_t pid)
 {
-    HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (proc == nullptr)
+    UniqueHandle proc(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid));
+    if (!proc)
     {
-        return std::nullopt;
+        return std::unexpected(ProcessIdentityError::kOpenFailed);
     }
 
-    auto identity = ReadProcessIdentity(proc, pid);
-    CloseHandle(proc);
-    return identity;
+    return ReadProcessIdentity(proc.get(), pid);
 }
 
 bool IsProcessIdentityCurrent(const ProcessIdentity& identity)
@@ -130,8 +172,8 @@ std::vector<ProcessInfo> EnumerateProcesses()
 
     const uint32_t self_pid = GetCurrentProcessId();
 
-    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snapshot == INVALID_HANDLE_VALUE)
+    UniqueHandle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
+    if (snapshot.get() == INVALID_HANDLE_VALUE)
     {
         return result;
     }
@@ -139,9 +181,8 @@ std::vector<ProcessInfo> EnumerateProcesses()
     PROCESSENTRY32W entry{};
     entry.dwSize = sizeof(entry);
 
-    if (Process32FirstW(snapshot, &entry) == 0)
+    if (Process32FirstW(snapshot.get(), &entry) == 0)
     {
-        CloseHandle(snapshot);
         return result;
     }
 
@@ -154,17 +195,7 @@ std::vector<ProcessInfo> EnumerateProcesses()
         if (pid != 0 && pid != scrambler::core::kSystemPid && pid != self_pid)
         {
             const auto* exe = static_cast<const wchar_t*>(entry.szExeFile);
-
-            const int exe_length = lstrlenW(exe);
-            const int len = WideCharToMultiByte(CP_UTF8, 0, exe, exe_length, nullptr, 0, nullptr, nullptr);
-
-            std::string name;
-
-            if (len > 0)
-            {
-                name.resize(static_cast<size_t>(len));
-                WideCharToMultiByte(CP_UTF8, 0, exe, exe_length, name.data(), len, nullptr, nullptr);
-            }
+            std::string name = WideToUtf8(exe);
 
             auto identity = GetProcessIdentity(pid);
             if (identity.has_value() && !(IsSystemProcessPath(identity->exe_path) || IsSessionZero(pid)))
@@ -179,13 +210,12 @@ std::vector<ProcessInfo> EnumerateProcesses()
             }
         }
 
-        if (Process32NextW(snapshot, &entry) == 0)
+        if (Process32NextW(snapshot.get(), &entry) == 0)
         {
             break;
         }
     }
 
-    CloseHandle(snapshot);
     return result;
 }
 

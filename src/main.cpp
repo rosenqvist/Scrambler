@@ -10,6 +10,8 @@
 #include <bit>
 #include <cstdlib>
 #include <dwmapi.h>
+#include <memory>
+#include <type_traits>
 #include <winsvc.h>
 
 #ifndef DWMWA_CAPTION_COLOR
@@ -18,23 +20,33 @@
 
 namespace
 {
+struct ServiceHandleCloser
+{
+    void operator()(SC_HANDLE handle) const noexcept
+    {
+        if (handle != nullptr)
+        {
+            CloseServiceHandle(handle);
+        }
+    }
+};
+
+using UniqueServiceHandle = std::unique_ptr<std::remove_pointer_t<SC_HANDLE>, ServiceHandleCloser>;
+
 void StopWinDivertService()
 {
-    SC_HANDLE scm = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
-    if (scm == nullptr)
+    UniqueServiceHandle scm(OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT));
+    if (!scm)
     {
         return;
     }
 
-    SC_HANDLE svc = OpenServiceW(scm, L"WinDivert", SERVICE_STOP | DELETE);
-    if (svc != nullptr)
+    UniqueServiceHandle svc(OpenServiceW(scm.get(), L"WinDivert", SERVICE_STOP | DELETE));
+    if (svc)
     {
         SERVICE_STATUS status{};
-        ControlService(svc, SERVICE_CONTROL_STOP, &status);
-        CloseServiceHandle(svc);
+        ControlService(svc.get(), SERVICE_CONTROL_STOP, &status);
     }
-
-    CloseServiceHandle(scm);
 }
 }  // namespace
 

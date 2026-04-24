@@ -10,6 +10,7 @@
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace scrambler::core
@@ -103,18 +104,18 @@ private:
     std::atomic<uint64_t>& Slot(Counter c) noexcept
     {
         // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index): index bounded by enum
-        return counters_[static_cast<size_t>(c)];
+        return counters_[std::to_underlying(c)];
     }
 
     const std::atomic<uint64_t>& Slot(Counter c) const noexcept
     {
         // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index): index bounded by enum
-        return counters_[static_cast<size_t>(c)];
+        return counters_[std::to_underlying(c)];
     }
 
     static constexpr size_t kRingCapacity = 1024;
 
-    std::array<std::atomic<uint64_t>, static_cast<size_t>(Counter::kCount)> counters_{};
+    std::array<std::atomic<uint64_t>, std::to_underlying(Counter::kCount)> counters_{};
     std::atomic<uint64_t> next_seq_{1};
     mutable std::mutex mutex_;
     std::deque<LogEntry> ring_;
