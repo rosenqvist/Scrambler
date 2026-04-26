@@ -24,7 +24,7 @@ Scrambler is a Windows utility designed to simulate poor network conditions for 
 ## How It Works
 Scrambler operates on two WinDivert layers at the same time:
 1. The FLOW layer tracks connection events and maps network 5-tuples (source/destination IP and ports, plus protocol) to process IDs.
-2. The NETWORK layer intercepts UDP packets, identifies the owning process using that mapping and applies delay or drop effects when needed.
+2. The NETWORK layer intercepts UDP packets, identifies the owning process using that mapping and applies configured effects when needed.
 
 <img src="docs/screenshots/diagram.png" width="1600">
 
