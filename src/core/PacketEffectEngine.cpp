@@ -25,7 +25,7 @@ std::chrono::steady_clock::duration DirectionPacketEffectEngine::TransmissionTim
     const auto transmission_nanos =
         ((packet_bytes * 1'000'000'000ULL) + throttle_bytes_per_second - 1ULL) / throttle_bytes_per_second;
     return std::chrono::duration_cast<std::chrono::steady_clock::duration>(
-        std::chrono::nanoseconds((std::max)(transmission_nanos, 1ULL)));
+        std::chrono::nanoseconds(std::max<std::uint64_t>(transmission_nanos, 1ULL)));
 }
 
 void DirectionPacketEffectEngine::ResetThrottleStateIfNeeded(const DirectionEffectSnapshot& snapshot)
@@ -112,7 +112,8 @@ void DirectionPacketEffectEngine::EmitPacketCopies(const OwnedPacket& packet,
         auto release_at = base_release_at;
         if (has_throttle)
         {
-            const auto throttled_release_at = (std::max)(release_at, throttle_release_at);
+            const auto throttled_release_at =
+                std::max<std::chrono::steady_clock::time_point>(release_at, throttle_release_at);
             if (throttled_release_at > release_at)
             {
                 applied_throttle = true;
@@ -141,12 +142,12 @@ void DirectionPacketEffectEngine::EmitPacketCopies(const OwnedPacket& packet,
     }
 }
 
-void PacketEffectEmission::AddImmediate(OwnedPacket packet)
+void PacketEffectEmission::AddImmediate(const OwnedPacket& packet)
 {
     immediate_packets.push_back(packet);
 }
 
-void PacketEffectEmission::AddScheduled(OwnedPacket packet, std::chrono::steady_clock::time_point release_at)
+void PacketEffectEmission::AddScheduled(const OwnedPacket& packet, std::chrono::steady_clock::time_point release_at)
 {
     scheduled_packets.push_back({.packet = packet, .release_at = release_at});
 }
@@ -176,7 +177,8 @@ DirectionPacketEffectEngine::DirectionPacketEffectEngine(const DirectionEffectCo
 {
 }
 
-PacketEffectEmission DirectionPacketEffectEngine::Process(OwnedPacket packet, std::chrono::steady_clock::time_point now)
+PacketEffectEmission DirectionPacketEffectEngine::Process(const OwnedPacket& packet,
+                                                          std::chrono::steady_clock::time_point now)
 {
     const DirectionEffectSnapshot snapshot = config_->Snapshot();
     ResetThrottleStateIfNeeded(snapshot);
@@ -204,7 +206,7 @@ PacketEffectEngine::PacketEffectEngine(const EffectConfig& effects)
 {
 }
 
-PacketEffectEmission PacketEffectEngine::Process(OwnedPacket packet, std::chrono::steady_clock::time_point now)
+PacketEffectEmission PacketEffectEngine::Process(const OwnedPacket& packet, std::chrono::steady_clock::time_point now)
 {
     return packet.metadata.is_outbound ? outbound_.Process(packet, now) : inbound_.Process(packet, now);
 }

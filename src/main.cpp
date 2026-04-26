@@ -18,6 +18,10 @@
     #define DWMWA_CAPTION_COLOR 35
 #endif
 
+#ifndef SCRAMBLER_VERSION_STRING
+    #define SCRAMBLER_VERSION_STRING "dev"
+#endif
+
 namespace
 {
 struct ServiceHandleCloser
@@ -57,6 +61,7 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     QApplication::setOrganizationName("Scrambler");
     QApplication::setApplicationName("Scrambler");
+    QApplication::setApplicationVersion(SCRAMBLER_VERSION_STRING);
 
     QIcon icon(":/icons/scrambler_icon_256.png");
 

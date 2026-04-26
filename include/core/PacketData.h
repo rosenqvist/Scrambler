@@ -31,7 +31,7 @@ struct OwnedPacket
 
     [[nodiscard]] static std::optional<OwnedPacket> CopyFrom(std::span<const uint8_t> packet_data,
                                                              const WINDIVERT_ADDRESS& addr,
-                                                             PacketMetadata metadata)
+                                                             const PacketMetadata& metadata)
     {
         if (packet_data.size() > kStandardMtuSize)
         {

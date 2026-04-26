@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(Scrambler LANGUAGES CXX)
+project(Scrambler VERSION 1.4.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -111,6 +111,14 @@ target_include_directories(scrambler PRIVATE
     ${CMAKE_SOURCE_DIR}/third_party
 )
 
+target_compile_definitions(scrambler PRIVATE
+    SCRAMBLER_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+    SCRAMBLER_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+    SCRAMBLER_VERSION_PATCH=${PROJECT_VERSION_PATCH}
+    SCRAMBLER_VERSION_STRING="${PROJECT_VERSION}"
+    SCRAMBLER_VERSION_DISPLAY="${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}"
+)
+
 target_link_libraries(scrambler PRIVATE
     Qt6::Widgets
     Qt6::Concurrent
@@ -146,16 +154,6 @@ add_custom_command(TARGET scrambler POST_BUILD
         "${QT_PLATFORM_DIR}/${QT_PLATFORM_DLL}"
         "$<TARGET_FILE_DIR:scrambler>/platforms/"
 )
-
-# Deploy Qt runtime DLLs and plugins for distribution
-if (WIN32)
-    qt_generate_deploy_app_script(
-        TARGET scrambler
-        OUTPUT_SCRIPT deploy_script
-        NO_UNSUPPORTED_PLATFORM_ERROR
-    )
-    install(SCRIPT ${deploy_script})
-endif()
 
 if (SCRAMBLER_ENABLE_TESTS)
     enable_testing()
@@ -200,13 +198,6 @@ if (SCRAMBLER_ENABLE_TESTS)
         gtest_discover_tests(scrambler_tests)
     endif()
 endif()
-
-install(TARGETS scrambler RUNTIME DESTINATION .)
-install(FILES
-    "${CMAKE_SOURCE_DIR}/third_party/windivert/x64/WinDivert.dll"
-    "${CMAKE_SOURCE_DIR}/third_party/windivert/x64/WinDivert64.sys"
-    DESTINATION .
-)
 
 # Copy the ASan runtime DLL next to the test binary so it can launch
 # without needing the LLVM runtime directory on PATH.

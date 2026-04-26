@@ -67,7 +67,7 @@ public:
 
     void SetDelayMs(int delay_ms)
     {
-        delay_ms_.store((std::max)(delay_ms, 0), std::memory_order_relaxed);
+        delay_ms_.store(std::max<int>(delay_ms, 0), std::memory_order_relaxed);
     }
 
     [[nodiscard]] int DelayJitterMs() const

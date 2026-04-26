@@ -10,9 +10,13 @@ Scrambler is a Windows utility designed to simulate poor network conditions for 
 | Feature | Description |
 |---------|-------------|
 | **Per-process targeting** | Select any running process from a filterable tree and apply effects only to its UDP traffic          |
-| **Packet delay** | Add configurable latency (0–1000 ms)                                                                          |
-| **Packet drop** | Probabilistic packet loss (0–100%)                                                                             |
-| **Independent direction filtering** | Configure inbound, outbound, or both directions separately for each effect                 |
+| **Packet delay** | Add configurable latency (0-1000 ms)                                                                          |
+| **Packet jitter** | Add randomized latency on top of the configured delay                                                        |
+| **Bandwidth throttle** | Limit traffic throughput in KB/s                                                                         |
+| **Packet drop** | Probabilistic packet loss (0-100%)                                                                             |
+| **Burst loss** | Drop short runs of packets to simulate unstable links                                                           |
+| **Packet duplication** | Duplicate packets at a configurable probability and copy count                                          |
+| **Independent direction controls** | Configure inbound, outbound, or both directions separately for each effect                |
 | **Global hotkeys** | Adjust delay, drop rate, and toggle effects by using hotkeys with support for modifiers                     |
 | **Sound feedback** | Audible tone on start/stop with configurable volume                                                         |
 | **Persistent settings** | All settings are saved upon exit                                                                  |
@@ -143,7 +147,7 @@ This project uses the following third-party software:
 - **[Google Test](https://github.com/google/googletest)** Licensed under **BSD 3-Clause**.
   Used for testing only, not distributed.
 
-##  License
+## License
 
 This project is licensed under the **[GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.html)**.
 See the `LICENSE` file for details.

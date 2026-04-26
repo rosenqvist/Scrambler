@@ -27,7 +27,7 @@ public:
     void Stop();
 
     // Enqueue an already-owned packet for future reinjection.
-    void Push(ScheduledPacket packet);
+    void Push(const ScheduledPacket& packet);
 
 private:
     void DrainLoop();

@@ -36,8 +36,8 @@ struct PacketEffectEmission
     std::vector<OwnedPacket> immediate_packets;
     std::vector<ScheduledPacket> scheduled_packets;
 
-    void AddImmediate(OwnedPacket packet);
-    void AddScheduled(OwnedPacket packet, std::chrono::steady_clock::time_point release_at);
+    void AddImmediate(const OwnedPacket& packet);
+    void AddScheduled(const OwnedPacket& packet, std::chrono::steady_clock::time_point release_at);
 
     [[nodiscard]] bool HasEffect(PacketEffectKind kind) const;
     [[nodiscard]] size_t ImmediateCount() const;
@@ -50,7 +50,7 @@ class DirectionPacketEffectEngine
 public:
     explicit DirectionPacketEffectEngine(const DirectionEffectConfig& config);
 
-    [[nodiscard]] PacketEffectEmission Process(OwnedPacket packet, std::chrono::steady_clock::time_point now);
+    [[nodiscard]] PacketEffectEmission Process(const OwnedPacket& packet, std::chrono::steady_clock::time_point now);
 
 private:
     [[nodiscard]] static std::chrono::steady_clock::duration TransmissionTimeForPacket(
@@ -79,7 +79,7 @@ class PacketEffectEngine
 public:
     explicit PacketEffectEngine(const EffectConfig& effects);
 
-    [[nodiscard]] PacketEffectEmission Process(OwnedPacket packet, std::chrono::steady_clock::time_point now);
+    [[nodiscard]] PacketEffectEmission Process(const OwnedPacket& packet, std::chrono::steady_clock::time_point now);
 
 private:
     DirectionPacketEffectEngine outbound_;

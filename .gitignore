@@ -1,5 +1,4 @@
 build/
-install/
 out/
 cmake-build-*/
 CMakeFiles/

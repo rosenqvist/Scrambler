@@ -298,7 +298,9 @@ void PacketInterceptor::CaptureLoop()
 #ifndef NDEBUG
                             const auto release_delay = std::chrono::duration_cast<std::chrono::milliseconds>(
                                 emission.scheduled_packets.front().release_at - now);
-                            const auto scheduled_delay = (std::max)(release_delay, std::chrono::milliseconds::zero());
+                            const auto scheduled_delay = release_delay > std::chrono::milliseconds::zero()
+                                                             ? release_delay
+                                                             : std::chrono::milliseconds::zero();
                             auto addrs = FormatAddresses(tuple.src_addr, tuple.dst_addr);
                             const char* schedule_label = emission.HasEffect(PacketEffectKind::kBandwidthThrottle)
                                                                  && !emission.HasEffect(PacketEffectKind::kDelay)

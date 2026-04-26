@@ -87,7 +87,7 @@ void DelayQueue::Stop()
     FlushPackets();
 }
 
-void DelayQueue::Push(ScheduledPacket packet)
+void DelayQueue::Push(const ScheduledPacket& packet)
 {
     auto* free_pkt_ptr = free_queue_.front();
 

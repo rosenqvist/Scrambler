@@ -382,7 +382,7 @@ LRESULT CALLBACK HotkeyManager::KeyboardHookProc(int n_code, WPARAM w_param, LPA
     auto* inst = instance.load(std::memory_order_acquire);
     if (n_code >= 0 && (w_param == WM_KEYDOWN || w_param == WM_SYSKEYDOWN) && inst)
     {
-        auto* hook_struct = reinterpret_cast<KBDLLHOOKSTRUCT*>(l_param);  // NOLINT(performance-no-int-to-ptr)
+        const auto* hook_struct = reinterpret_cast<KBDLLHOOKSTRUCT*>(l_param);  // NOLINT(performance-no-int-to-ptr)
         UINT vk = hook_struct->vkCode;
 
         if (vk != VK_CONTROL && vk != VK_SHIFT && vk != VK_MENU && vk != VK_LCONTROL && vk != VK_RCONTROL

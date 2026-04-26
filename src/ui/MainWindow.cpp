@@ -47,6 +47,10 @@
 #include <utility>
 #include <vector>
 
+#ifndef SCRAMBLER_VERSION_DISPLAY
+    #define SCRAMBLER_VERSION_DISPLAY "dev"
+#endif
+
 namespace scrambler::ui
 {
 
@@ -130,7 +134,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::SetupUi()
 {
-    setWindowTitle("Scrambler 1.4");
+    setWindowTitle(QStringLiteral("Scrambler " SCRAMBLER_VERSION_DISPLAY));
     setMinimumSize(520, 600);
 
     auto* central = new QWidget();
